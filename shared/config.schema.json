@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://xray-desktop.local/config.schema.json",
+  "title": "Xray Desktop App Config",
+  "type": "object",
+  "required": [
+    "activeProfileId",
+    "connectionState",
+    "routingMode",
+    "dnsMode",
+    "systemProxyEnabled",
+    "tunEnabled",
+    "launchAtStartup",
+    "proxyDomains",
+    "directDomains",
+    "blockedDomains",
+    "profiles"
+  ],
+  "properties": {
+    "activeProfileId": {
+      "type": "string"
+    },
+    "connectionState": {
+      "type": "string",
+      "enum": ["connected", "disconnected"]
+    },
+    "routingMode": {
+      "type": "string",
+      "enum": ["global", "whitelist", "blacklist"]
+    },
+    "dnsMode": {
+      "type": "string",
+      "enum": ["auto", "proxy", "direct"]
+    },
+    "systemProxyEnabled": {
+      "type": "boolean"
+    },
+    "tunEnabled": {
+      "type": "boolean"
+    },
+    "launchAtStartup": {
+      "type": "boolean"
+    },
+    "proxyDomains": {
+      "type": "array",
+      "items": { "type": "string" },
+      "uniqueItems": true
+    },
+    "directDomains": {
+      "type": "array",
+      "items": { "type": "string" },
+      "uniqueItems": true
+    },
+    "blockedDomains": {
+      "type": "array",
+      "items": { "type": "string" },
+      "uniqueItems": true
+    },
+    "profiles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "latencyMs", "health", "protocol"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "latencyMs": { "type": "integer", "minimum": 0 },
+          "health": {
+            "type": "string",
+            "enum": ["healthy", "testing", "offline"]
+          },
+          "protocol": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

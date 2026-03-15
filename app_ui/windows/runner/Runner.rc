@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.example" "\0"
-            VALUE "FileDescription", "xray_desktop_ui" "\0"
+            VALUE "CompanyName", "Troodi" "\0"
+            VALUE "FileDescription", "Troodi VPN" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "xray_desktop_ui" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 com.example. All rights reserved." "\0"
+            VALUE "InternalName", "Troodi VPN" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 Troodi. All rights reserved." "\0"
             VALUE "OriginalFilename", "xray_desktop_ui.exe" "\0"
-            VALUE "ProductName", "xray_desktop_ui" "\0"
+            VALUE "ProductName", "Troodi VPN" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

@@ -3,21 +3,22 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 
 void main() {
-  runApp(const XrayDesktopApp());
+  runApp(const TroodiVpnApp());
 }
 
-class XrayDesktopApp extends StatelessWidget {
-  const XrayDesktopApp({super.key});
+class TroodiVpnApp extends StatelessWidget {
+  const TroodiVpnApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     const seed = Color(0xFF0E5E6F);
 
     return MaterialApp(
-      title: 'Xray Desktop',
+      title: 'Troodi VPN',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme:
@@ -39,6 +40,8 @@ enum DnsMode { auto, proxy, direct }
 
 enum ProfileHealth { healthy, testing, offline }
 
+enum AppPage { home, rules, profiles, settings }
+
 class ServerProfile {
   const ServerProfile({
     required this.id,
@@ -46,6 +49,22 @@ class ServerProfile {
     required this.latencyMs,
     required this.health,
     required this.protocol,
+    this.address = '',
+    this.port = 0,
+    this.sni = '',
+    this.security = '',
+    this.transport = '',
+    this.alpn = '',
+    this.fingerprint = '',
+    this.flow = '',
+    this.host = '',
+    this.path = '',
+    this.realityPublicKey = '',
+    this.realityShortId = '',
+    this.spiderX = '',
+    this.userId = '',
+    this.password = '',
+    this.rawLink = '',
   });
 
   final String id;
@@ -53,6 +72,22 @@ class ServerProfile {
   final int latencyMs;
   final ProfileHealth health;
   final String protocol;
+  final String address;
+  final int port;
+  final String sni;
+  final String security;
+  final String transport;
+  final String alpn;
+  final String fingerprint;
+  final String flow;
+  final String host;
+  final String path;
+  final String realityPublicKey;
+  final String realityShortId;
+  final String spiderX;
+  final String userId;
+  final String password;
+  final String rawLink;
 }
 
 class AppConfigState {
@@ -406,6 +441,22 @@ ServerProfile _serverProfileFromJson(Map<String, dynamic> json) {
     latencyMs: json['latencyMs'] as int? ?? 0,
     health: _healthFromString(json['health'] as String? ?? 'offline'),
     protocol: json['protocol'] as String? ?? 'unknown',
+    address: json['address'] as String? ?? '',
+    port: json['port'] as int? ?? 0,
+    sni: json['sni'] as String? ?? '',
+    security: json['security'] as String? ?? '',
+    transport: json['transport'] as String? ?? '',
+    alpn: json['alpn'] as String? ?? '',
+    fingerprint: json['fingerprint'] as String? ?? '',
+    flow: json['flow'] as String? ?? '',
+    host: json['host'] as String? ?? '',
+    path: json['path'] as String? ?? '',
+    realityPublicKey: json['realityPublicKey'] as String? ?? '',
+    realityShortId: json['realityShortId'] as String? ?? '',
+    spiderX: json['spiderX'] as String? ?? '',
+    userId: json['userId'] as String? ?? '',
+    password: json['password'] as String? ?? '',
+    rawLink: json['rawLink'] as String? ?? '',
   );
 }
 
@@ -416,6 +467,22 @@ Map<String, dynamic> _serverProfileToJson(ServerProfile profile) {
     'latencyMs': profile.latencyMs,
     'health': profile.health.name,
     'protocol': profile.protocol,
+    'address': profile.address,
+    'port': profile.port,
+    'sni': profile.sni,
+    'security': profile.security,
+    'transport': profile.transport,
+    'alpn': profile.alpn,
+    'fingerprint': profile.fingerprint,
+    'flow': profile.flow,
+    'host': profile.host,
+    'path': profile.path,
+    'realityPublicKey': profile.realityPublicKey,
+    'realityShortId': profile.realityShortId,
+    'spiderX': profile.spiderX,
+    'userId': profile.userId,
+    'password': profile.password,
+    'rawLink': profile.rawLink,
   };
 }
 
@@ -472,8 +539,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool systemProxyEnabled = true;
   bool tunEnabled = false;
   bool launchAtStartup = true;
-  int selectedNavigationIndex = 0;
-  int selectedTabIndex = 0;
+  AppPage selectedPage = AppPage.home;
   bool isLoading = true;
   bool isBusy = false;
   String? errorMessage;
@@ -549,7 +615,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
 
     return profiles
-        .where((profile) => profile.name.toLowerCase().contains(query))
+        .where(
+          (profile) =>
+              profile.name.toLowerCase().contains(query) ||
+              profile.protocol.toLowerCase().contains(query) ||
+              profile.address.toLowerCase().contains(query) ||
+              profile.sni.toLowerCase().contains(query) ||
+              profile.host.toLowerCase().contains(query) ||
+              profile.transport.toLowerCase().contains(query),
+        )
         .toList();
   }
 
@@ -649,11 +723,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   connection: connection,
                   routingMode: routingMode,
                   dnsMode: dnsMode,
-                  selectedIndex: selectedNavigationIndex,
-                  onSelect: (index) {
+                  selectedPage: selectedPage,
+                  onSelect: (page) {
                     setState(() {
-                      selectedNavigationIndex = index;
-                      selectedTabIndex = index == 0 ? 0 : index - 1;
+                      selectedPage = page;
                     });
                   },
                 ),
@@ -671,11 +744,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Expanded(child: _buildContent()),
         const SizedBox(height: 12),
         NavigationBar(
-          selectedIndex: selectedNavigationIndex,
+          selectedIndex: selectedPage.index,
           onDestinationSelected: (index) {
             setState(() {
-              selectedNavigationIndex = index;
-              selectedTabIndex = index == 0 ? 0 : index - 1;
+              selectedPage = AppPage.values[index];
             });
           },
           destinations: const [
@@ -923,9 +995,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildContent() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    switch (selectedPage) {
+      case AppPage.home:
+        return _buildHomeView();
+      case AppPage.rules:
+        return _buildRulesView();
+      case AppPage.profiles:
+        return _buildProfilesView();
+      case AppPage.settings:
+        return _buildSettingsView();
+    }
+  }
+
+  Widget _buildHomeView() {
+    return ListView(
       children: [
+        const _PageHeader(
+          eyebrow: 'Home',
+          title: 'Connection control',
+          description:
+              'Keep the main screen focused on connect, status and the current route mode.',
+        ),
+        const SizedBox(height: 16),
         _HeroCard(
           profile: activeProfile,
           connection: connection,
@@ -945,15 +1036,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
           },
         ),
         const SizedBox(height: 20),
-        Expanded(
-          child: IndexedStack(
-            index: selectedTabIndex,
-            children: [
-              _buildRulesView(),
-              _buildProfilesView(),
-              _buildSettingsView(),
-            ],
-          ),
+        _HomeInfoSection(
+          profile: activeProfile,
+          runtimeStatus: runtimeStatus,
+          routingMode: routingMode,
+          systemProxyEnabled: systemProxyEnabled,
+          tunEnabled: tunEnabled,
         ),
       ],
     );
@@ -964,103 +1052,76 @@ class _DashboardScreenState extends State<DashboardScreen> {
       builder: (context, constraints) {
         final useThreeColumns = constraints.maxWidth >= 1050;
         final useTwoColumns = constraints.maxWidth >= 700;
+        final cards = _rulesCards();
 
         if (useThreeColumns) {
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          return ListView(
             children: [
-              Expanded(
-                child: _buildDomainCard(
-                  title: 'Via proxy',
-                  description: 'Domains that should always go through Xray.',
-                  domains: proxyDomains,
-                  controller: proxyController,
-                  accent: const Color(0xFF0E5E6F),
-                  placeholder: 'github.com',
-                  onAdd: () => _addDomain(
-                    proxyController,
-                    proxyDomains,
-                    (items) => _saveConfig(
-                      _currentConfig().copyWith(proxyDomains: items),
-                    ),
-                  ),
-                  onRemove: (domain) => _saveConfig(
-                    _currentConfig().copyWith(
-                      proxyDomains:
-                          proxyDomains.where((item) => item != domain).toList(),
-                    ),
-                  ),
-                ),
+              const _PageHeader(
+                eyebrow: 'Rules',
+                title: 'Split-routing lists',
+                description:
+                    'Edit domains that always go through the tunnel, bypass it directly or get blocked outright.',
               ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: _buildDomainCard(
-                  title: 'Direct',
-                  description: 'Domains that bypass the tunnel.',
-                  domains: directDomains,
-                  controller: directController,
-                  accent: const Color(0xFF6E5D46),
-                  placeholder: 'bank.ru',
-                  onAdd: () => _addDomain(
-                    directController,
-                    directDomains,
-                    (items) => _saveConfig(
-                      _currentConfig().copyWith(directDomains: items),
-                    ),
-                  ),
-                  onRemove: (domain) => _saveConfig(
-                    _currentConfig().copyWith(
-                      directDomains: directDomains
-                          .where((item) => item != domain)
-                          .toList(),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: _buildDomainCard(
-                  title: 'Blocked',
-                  description: 'Domains that should be dropped completely.',
-                  domains: blockedDomains,
-                  controller: blockedController,
-                  accent: const Color(0xFF8B3A3A),
-                  placeholder: 'ads.example.com',
-                  onAdd: () => _addDomain(
-                    blockedController,
-                    blockedDomains,
-                    (items) => _saveConfig(
-                      _currentConfig().copyWith(blockedDomains: items),
-                    ),
-                  ),
-                  onRemove: (domain) => _saveConfig(
-                    _currentConfig().copyWith(
-                      blockedDomains: blockedDomains
-                          .where((item) => item != domain)
-                          .toList(),
-                    ),
-                  ),
-                ),
+              const SizedBox(height: 16),
+              const _RulesSummaryCard(),
+              const SizedBox(height: 16),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: cards[0]),
+                  const SizedBox(width: 16),
+                  Expanded(child: cards[1]),
+                  const SizedBox(width: 16),
+                  Expanded(child: cards[2]),
+                ],
               ),
             ],
           );
         }
 
-        final cards = _rulesCards();
         if (useTwoColumns) {
-          return GridView.count(
-            crossAxisCount: 2,
-            crossAxisSpacing: 16,
-            mainAxisSpacing: 16,
-            childAspectRatio: 1.05,
-            children: cards,
+          return ListView(
+            children: [
+              const _PageHeader(
+                eyebrow: 'Rules',
+                title: 'Split-routing lists',
+                description:
+                    'Edit domains that always go through the tunnel, bypass it directly or get blocked outright.',
+              ),
+              const SizedBox(height: 16),
+              const _RulesSummaryCard(),
+              const SizedBox(height: 16),
+              GridView.count(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                crossAxisCount: 2,
+                crossAxisSpacing: 16,
+                mainAxisSpacing: 16,
+                childAspectRatio: 1.05,
+                children: cards,
+              ),
+            ],
           );
         }
 
         return ListView.separated(
-          itemCount: cards.length,
+          itemCount: cards.length + 2,
           separatorBuilder: (context, index) => const SizedBox(height: 16),
-          itemBuilder: (context, index) => cards[index],
+          itemBuilder: (context, index) {
+            if (index == 0) {
+              return const _PageHeader(
+                eyebrow: 'Rules',
+                title: 'Split-routing lists',
+                description:
+                    'Edit domains that always go through the tunnel, bypass it directly or get blocked outright.',
+              );
+            }
+            if (index == 1) {
+              return const _RulesSummaryCard();
+            }
+            return cards[index - 2];
+          },
         );
       },
     );
@@ -1248,124 +1309,199 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildProfilesView() {
-    return Card(
-      elevation: 0,
-      color: Colors.white.withValues(alpha: 0.82),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Server profiles',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
-            const SizedBox(height: 4),
-            Text(
-              'Import subscriptions and choose the active node with minimal UI noise.',
-              style: TextStyle(color: Colors.black.withValues(alpha: 0.6)),
-            ),
-            const SizedBox(height: 18),
-            Row(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final list = Card(
+          elevation: 0,
+          color: Colors.white.withValues(alpha: 0.82),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: TextField(
-                    controller: searchController,
-                    onChanged: (_) => setState(() {}),
-                    decoration: InputDecoration(
-                      hintText: 'Search profiles',
-                      prefixIcon: const Icon(Icons.search_rounded),
-                      filled: true,
-                      fillColor: const Color(0xFFF7F3EC),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(18),
-                        borderSide: BorderSide.none,
+                const _PageHeader(
+                  eyebrow: 'Profiles',
+                  title: 'Server library',
+                  description:
+                      'Import VLESS, Trojan, VMess and other Xray-compatible profiles from clipboard or manually.',
+                ),
+                const SizedBox(height: 18),
+                _RegionPresetCard(
+                  onApplyRuPreset: () {
+                    _showMessage(
+                      'Regional presets for RU will be added after the profile catalog is wired.',
+                    );
+                  },
+                ),
+                const SizedBox(height: 18),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    SizedBox(
+                      width: constraints.maxWidth > 860
+                          ? 320
+                          : constraints.maxWidth,
+                      child: TextField(
+                        controller: searchController,
+                        onChanged: (_) => setState(() {}),
+                        decoration: InputDecoration(
+                          hintText: 'Search profiles, SNI or address',
+                          prefixIcon: const Icon(Icons.search_rounded),
+                          filled: true,
+                          fillColor: const Color(0xFFF7F3EC),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(18),
+                            borderSide: BorderSide.none,
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                FilledButton.icon(
-                  onPressed: () {},
-                  icon: const Icon(Icons.add_link_rounded),
-                  label: const Text('Import subscription'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 18),
-            Expanded(
-              child: ListView.separated(
-                itemCount: filteredProfiles.length,
-                separatorBuilder: (context, index) =>
-                    const SizedBox(height: 12),
-                itemBuilder: (context, index) {
-                  final profile = filteredProfiles[index];
-                  final isActive = profile.id == activeProfileId;
-
-                  return Container(
-                    padding: const EdgeInsets.all(18),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF9F7F2),
-                      borderRadius: BorderRadius.circular(22),
+                    FilledButton.icon(
+                      onPressed: _importProfileFromClipboard,
+                      icon: const Icon(Icons.content_paste_rounded),
+                      label: const Text('Import clipboard'),
                     ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
+                    OutlinedButton.icon(
+                      onPressed: _showProfileImportDialog,
+                      icon: const Icon(Icons.add_link_rounded),
+                      label: const Text('Manual import'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                Expanded(
+                  child: ListView.separated(
+                    itemCount: filteredProfiles.length,
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(height: 12),
+                    itemBuilder: (context, index) {
+                      final profile = filteredProfiles[index];
+                      final isActive = profile.id == activeProfileId;
+
+                      return Container(
+                        padding: const EdgeInsets.all(18),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF9F7F2),
+                          borderRadius: BorderRadius.circular(22),
+                          border: Border.all(
+                            color: isActive
+                                ? const Color(0xFF0E5E6F)
+                                : Colors.transparent,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Expanded(
-                                    child: Text(
-                                      profile.name,
-                                      style: const TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w700),
-                                    ),
-                                  ),
-                                  if (isActive)
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 10, vertical: 6),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFD4E7E1),
-                                        borderRadius:
-                                            BorderRadius.circular(999),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          profile.name,
+                                          style: const TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.w700),
+                                        ),
                                       ),
-                                      child: const Text('Active'),
+                                      if (isActive)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 10, vertical: 6),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFD4E7E1),
+                                            borderRadius:
+                                                BorderRadius.circular(999),
+                                          ),
+                                          child: const Text('Active'),
+                                        ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    '${profile.protocol.toUpperCase()} • ${profile.address}:${profile.port}',
+                                    style: TextStyle(
+                                        color: Colors.black
+                                            .withValues(alpha: 0.58)),
+                                  ),
+                                  if (profile.transport.isNotEmpty ||
+                                      profile.security.isNotEmpty)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 4),
+                                      child: Text(
+                                        '${profile.transport.isEmpty ? 'tcp' : profile.transport} • ${profile.security.isEmpty ? 'none' : profile.security}',
+                                        style: TextStyle(
+                                          color: Colors.black
+                                              .withValues(alpha: 0.52),
+                                        ),
+                                      ),
+                                    ),
+                                  if (profile.sni.isNotEmpty)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 4),
+                                      child: Text(
+                                        'SNI ${profile.sni}',
+                                        style: TextStyle(
+                                          color: Colors.black
+                                              .withValues(alpha: 0.52),
+                                        ),
+                                      ),
                                     ),
                                 ],
                               ),
-                              const SizedBox(height: 8),
-                              Text(
-                                '${profile.protocol} • ${profile.latencyMs} ms',
-                                style: TextStyle(
-                                    color:
-                                        Colors.black.withValues(alpha: 0.58)),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        _HealthBadge(health: profile.health),
-                        const SizedBox(width: 12),
-                        FilledButton.tonal(
-                          onPressed: () => _saveConfig(
-                            _currentConfig().copyWith(
-                              activeProfileId: profile.id,
                             ),
-                          ),
-                          child: Text(isActive ? 'Selected' : 'Use'),
+                            const SizedBox(width: 16),
+                            _HealthBadge(health: profile.health),
+                            const SizedBox(width: 12),
+                            IconButton.outlined(
+                              onPressed: () => _removeProfile(profile.id),
+                              icon: const Icon(Icons.delete_outline_rounded),
+                            ),
+                            const SizedBox(width: 12),
+                            FilledButton.tonal(
+                              onPressed: () => _saveConfig(
+                                _currentConfig().copyWith(
+                                  activeProfileId: profile.id,
+                                ),
+                              ),
+                              child: Text(isActive ? 'Selected' : 'Use'),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                  );
-                },
-              ),
+                      );
+                    },
+                  ),
+                ),
+              ],
             ),
+          ),
+        );
+
+        final details = _ProfileDetailsCard(profile: activeProfile);
+
+        if (constraints.maxWidth >= 1160) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(flex: 5, child: list),
+              const SizedBox(width: 16),
+              Expanded(flex: 4, child: details),
+            ],
+          );
+        }
+
+        return ListView(
+          children: [
+            SizedBox(height: 680, child: list),
+            const SizedBox(height: 16),
+            details,
           ],
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -1510,6 +1646,65 @@ class _DashboardScreenState extends State<DashboardScreen> {
     controller.clear();
   }
 
+  Future<void> _saveProfiles(List<ServerProfile> nextProfiles) async {
+    final nextActive =
+        nextProfiles.any((profile) => profile.id == activeProfileId)
+            ? activeProfileId
+            : (nextProfiles.isNotEmpty ? nextProfiles.first.id : '');
+    await _saveConfig(
+      _currentConfig().copyWith(
+        profiles: nextProfiles,
+        activeProfileId: nextActive,
+      ),
+    );
+  }
+
+  Future<void> _importProfileFromClipboard() async {
+    final clipboard = await Clipboard.getData('text/plain');
+    final raw = clipboard?.text?.trim() ?? '';
+    if (raw.isEmpty) {
+      _showMessage('Clipboard is empty.', isError: true);
+      return;
+    }
+    try {
+      final imported = _parseProfilesInput(raw);
+      await _saveProfiles([...imported, ...profiles]);
+      if (mounted) {
+        _showMessage(
+          imported.length == 1
+              ? 'Profile imported from clipboard.'
+              : '${imported.length} profiles imported from clipboard.',
+        );
+      }
+    } catch (error) {
+      _showMessage(error.toString(), isError: true);
+    }
+  }
+
+  Future<void> _showProfileImportDialog() async {
+    final imported = await showDialog<List<ServerProfile>>(
+      context: context,
+      builder: (context) => const _ProfileImportDialog(),
+    );
+    if (imported == null || imported.isEmpty) {
+      return;
+    }
+    await _saveProfiles([...imported, ...profiles]);
+    if (mounted) {
+      _showMessage(
+        imported.length == 1
+            ? 'Profile added.'
+            : '${imported.length} profiles added.',
+      );
+    }
+  }
+
+  Future<void> _removeProfile(String profileId) async {
+    final nextProfiles =
+        profiles.where((profile) => profile.id != profileId).toList();
+    await _saveProfiles(nextProfiles);
+  }
+
   String _normalizeDomain(String raw) {
     final trimmed = raw.trim().toLowerCase();
     if (trimmed.isEmpty) {
@@ -1528,23 +1723,23 @@ class _Sidebar extends StatelessWidget {
     required this.connection,
     required this.routingMode,
     required this.dnsMode,
-    required this.selectedIndex,
+    required this.selectedPage,
     required this.onSelect,
   });
 
   final ConnectionStateValue connection;
   final RoutingMode routingMode;
   final DnsMode dnsMode;
-  final int selectedIndex;
-  final ValueChanged<int> onSelect;
+  final AppPage selectedPage;
+  final ValueChanged<AppPage> onSelect;
 
   @override
   Widget build(BuildContext context) {
     const items = [
-      ('Home', Icons.home_outlined),
-      ('Rules', Icons.rule_folder_outlined),
-      ('Profiles', Icons.dns_outlined),
-      ('Settings', Icons.tune_outlined),
+      (AppPage.home, 'Home', Icons.home_outlined),
+      (AppPage.rules, 'Rules', Icons.rule_folder_outlined),
+      (AppPage.profiles, 'Profiles', Icons.dns_outlined),
+      (AppPage.settings, 'Settings', Icons.tune_outlined),
     ];
 
     return Container(
@@ -1556,26 +1751,18 @@ class _Sidebar extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          const Row(
             children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF173C4A),
-                  borderRadius: BorderRadius.circular(18),
-                ),
-                child: const Icon(Icons.shield_outlined, color: Colors.white),
-              ),
-              const SizedBox(width: 14),
-              const Column(
+              _TroodiLogo(size: 48),
+              SizedBox(width: 14),
+              Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('XR UI',
+                  Text('Troodi VPN',
                       style:
                           TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
                   SizedBox(height: 2),
-                  Text('Minimal Xray client',
+                  Text('Minimal Xray desktop client',
                       style: TextStyle(color: Colors.black54)),
                 ],
               ),
@@ -1584,10 +1771,10 @@ class _Sidebar extends StatelessWidget {
           const SizedBox(height: 26),
           for (var index = 0; index < items.length; index++) ...[
             _NavButton(
-              label: items[index].$1,
-              icon: items[index].$2,
-              selected: index == selectedIndex,
-              onTap: () => onSelect(index),
+              label: items[index].$2,
+              icon: items[index].$3,
+              selected: items[index].$1 == selectedPage,
+              onTap: () => onSelect(items[index].$1),
             ),
             const SizedBox(height: 10),
           ],
@@ -1619,6 +1806,312 @@ class _Sidebar extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _PageHeader extends StatelessWidget {
+  const _PageHeader({
+    required this.eyebrow,
+    required this.title,
+    required this.description,
+  });
+
+  final String eyebrow;
+  final String title;
+  final String description;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          eyebrow.toUpperCase(),
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1.3,
+            color: Color(0xFF6E5D46),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          title,
+          style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          description,
+          style: TextStyle(color: Colors.black.withValues(alpha: 0.64)),
+        ),
+      ],
+    );
+  }
+}
+
+class _TroodiLogo extends StatelessWidget {
+  const _TroodiLogo({this.size = 52});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF0E5E6F), Color(0xFF173C4A)],
+        ),
+        borderRadius: BorderRadius.circular(size * 0.34),
+      ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Icon(Icons.shield_outlined, color: Colors.white, size: size * 0.5),
+          Positioned(
+            bottom: size * 0.16,
+            child: Container(
+              width: size * 0.28,
+              height: size * 0.06,
+              decoration: BoxDecoration(
+                color: const Color(0xFFE8D39D),
+                borderRadius: BorderRadius.circular(999),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HomeInfoSection extends StatelessWidget {
+  const _HomeInfoSection({
+    required this.profile,
+    required this.runtimeStatus,
+    required this.routingMode,
+    required this.systemProxyEnabled,
+    required this.tunEnabled,
+  });
+
+  final ServerProfile profile;
+  final RuntimeSnapshot runtimeStatus;
+  final RoutingMode routingMode;
+  final bool systemProxyEnabled;
+  final bool tunEnabled;
+
+  @override
+  Widget build(BuildContext context) {
+    final cards = [
+      _MetricCard(
+        label: 'Endpoint',
+        value: profile.address.isEmpty
+            ? 'Not configured'
+            : '${profile.address}:${profile.port}',
+        accent: const Color(0xFF173C4A),
+      ),
+      _MetricCard(
+        label: 'SNI',
+        value: profile.sni.isEmpty ? 'Not specified' : profile.sni,
+        accent: const Color(0xFF6E5D46),
+      ),
+      _MetricCard(
+        label: 'Routing',
+        value:
+            '${routingMode.name} / ${tunEnabled ? 'TUN' : systemProxyEnabled ? 'Proxy' : 'Manual'}',
+        accent: const Color(0xFF2C7A5D),
+      ),
+    ];
+
+    return Wrap(
+      spacing: 16,
+      runSpacing: 16,
+      children: cards,
+    );
+  }
+}
+
+class _RulesSummaryCard extends StatelessWidget {
+  const _RulesSummaryCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.82),
+        borderRadius: BorderRadius.circular(28),
+      ),
+      child: const Wrap(
+        spacing: 14,
+        runSpacing: 14,
+        children: [
+          _ChipLabel(label: 'Global: everything through proxy'),
+          _ChipLabel(label: 'Whitelist: only listed domains via proxy'),
+          _ChipLabel(label: 'Blacklist: listed domains direct'),
+          _ChipLabel(label: 'Blocked: dropped by Xray'),
+        ],
+      ),
+    );
+  }
+}
+
+class _RegionPresetCard extends StatelessWidget {
+  const _RegionPresetCard({required this.onApplyRuPreset});
+
+  final VoidCallback onApplyRuPreset;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF7F3EC),
+        borderRadius: BorderRadius.circular(22),
+      ),
+      child: Wrap(
+        spacing: 14,
+        runSpacing: 12,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          const SizedBox(
+            width: 340,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Preset regions',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                ),
+                SizedBox(height: 4),
+                Text(
+                  'Later this section will pull curated profile packs by region and merge them with your routing rules.',
+                ),
+              ],
+            ),
+          ),
+          FilledButton.tonalIcon(
+            onPressed: onApplyRuPreset,
+            icon: const Icon(Icons.public_rounded),
+            label: const Text('Preset RU'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfileDetailsCard extends StatelessWidget {
+  const _ProfileDetailsCard({required this.profile});
+
+  final ServerProfile profile;
+
+  @override
+  Widget build(BuildContext context) {
+    final hostPath = [
+      if (profile.host.isNotEmpty) profile.host,
+      if (profile.path.isNotEmpty) profile.path,
+    ];
+    final reality = [
+      if (profile.realityPublicKey.isNotEmpty) 'pk ${profile.realityPublicKey}',
+      if (profile.realityShortId.isNotEmpty) 'sid ${profile.realityShortId}',
+      if (profile.spiderX.isNotEmpty) 'spx ${profile.spiderX}',
+    ];
+
+    return Card(
+      elevation: 0,
+      color: Colors.white.withValues(alpha: 0.82),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Profile details',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 8),
+            _StatusRow(label: 'Name', value: profile.name),
+            const SizedBox(height: 10),
+            _StatusRow(
+                label: 'Protocol', value: profile.protocol.toUpperCase()),
+            const SizedBox(height: 10),
+            _StatusRow(
+              label: 'Address',
+              value: profile.address.isEmpty
+                  ? 'Not specified'
+                  : '${profile.address}:${profile.port}',
+            ),
+            const SizedBox(height: 10),
+            _StatusRow(
+              label: 'SNI',
+              value: profile.sni.isEmpty ? 'Not specified' : profile.sni,
+            ),
+            const SizedBox(height: 10),
+            _StatusRow(
+              label: 'Security',
+              value: profile.security.isEmpty ? 'Auto' : profile.security,
+            ),
+            const SizedBox(height: 10),
+            _StatusRow(
+              label: 'Transport',
+              value: profile.transport.isEmpty ? 'tcp' : profile.transport,
+            ),
+            const SizedBox(height: 10),
+            _StatusRow(
+              label: 'ALPN',
+              value: profile.alpn.isEmpty ? 'Not specified' : profile.alpn,
+            ),
+            const SizedBox(height: 10),
+            _StatusRow(
+              label: 'Fingerprint',
+              value: profile.fingerprint.isEmpty
+                  ? 'Not specified'
+                  : profile.fingerprint,
+            ),
+            const SizedBox(height: 10),
+            _StatusRow(
+              label: 'Flow',
+              value: profile.flow.isEmpty ? 'Not specified' : profile.flow,
+            ),
+            const SizedBox(height: 10),
+            _StatusRow(
+              label: 'Host / path',
+              value: hostPath.isEmpty ? 'Not specified' : hostPath.join('  '),
+            ),
+            const SizedBox(height: 10),
+            _StatusRow(
+              label: 'Reality',
+              value: reality.isEmpty ? 'Not specified' : reality.join('  '),
+            ),
+            const SizedBox(height: 10),
+            _StatusRow(
+              label: 'Credential',
+              value: profile.userId.isNotEmpty
+                  ? profile.userId
+                  : profile.password.isNotEmpty
+                      ? profile.password
+                      : 'Not specified',
+            ),
+            if (profile.rawLink.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF7F3EC),
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: SelectableText(profile.rawLink),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -2018,4 +2511,525 @@ class _HealthBadge extends StatelessWidget {
           style: TextStyle(fontWeight: FontWeight.w700, color: color)),
     );
   }
+}
+
+class _ImportSectionCard extends StatelessWidget {
+  const _ImportSectionCard({
+    required this.title,
+    required this.child,
+  });
+
+  final String title;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF7F3EC),
+        borderRadius: BorderRadius.circular(22),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 12),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+enum _ProfileImportMode { link, manual }
+
+class _ProfileImportDialog extends StatefulWidget {
+  const _ProfileImportDialog();
+
+  @override
+  State<_ProfileImportDialog> createState() => _ProfileImportDialogState();
+}
+
+class _ProfileImportDialogState extends State<_ProfileImportDialog> {
+  _ProfileImportMode mode = _ProfileImportMode.link;
+  String protocol = 'vless';
+  String transport = 'tcp';
+  String security = 'tls';
+  String? errorText;
+
+  final linkController = TextEditingController();
+  final nameController = TextEditingController();
+  final addressController = TextEditingController();
+  final portController = TextEditingController(text: '443');
+  final sniController = TextEditingController();
+  final alpnController = TextEditingController(text: 'h2,http/1.1');
+  final fingerprintController = TextEditingController(text: 'chrome');
+  final flowController = TextEditingController();
+  final hostController = TextEditingController();
+  final pathController = TextEditingController();
+  final realityPublicKeyController = TextEditingController();
+  final realityShortIdController = TextEditingController();
+  final spiderXController = TextEditingController(text: '/');
+  final userIdController = TextEditingController();
+  final passwordController = TextEditingController();
+
+  @override
+  void dispose() {
+    for (final controller in [
+      linkController,
+      nameController,
+      addressController,
+      portController,
+      sniController,
+      alpnController,
+      fingerprintController,
+      flowController,
+      hostController,
+      pathController,
+      realityPublicKeyController,
+      realityShortIdController,
+      spiderXController,
+      userIdController,
+      passwordController,
+    ]) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Import profile'),
+      content: SizedBox(
+        width: 720,
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SegmentedButton<_ProfileImportMode>(
+                showSelectedIcon: false,
+                segments: const [
+                  ButtonSegment(
+                      value: _ProfileImportMode.link, label: Text('Link')),
+                  ButtonSegment(
+                      value: _ProfileImportMode.manual, label: Text('Manual')),
+                ],
+                selected: {mode},
+                onSelectionChanged: (selection) {
+                  setState(() {
+                    mode = selection.first;
+                    errorText = null;
+                  });
+                },
+              ),
+              const SizedBox(height: 18),
+              if (mode == _ProfileImportMode.link)
+                TextField(
+                  controller: linkController,
+                  minLines: 4,
+                  maxLines: 8,
+                  decoration: _dialogDecoration(
+                    'Paste one or several links: vless://..., trojan://..., vmess://...',
+                  ).copyWith(
+                    helperText:
+                        'You can paste multiple links separated by new lines.',
+                  ),
+                )
+              else
+                Column(
+                  children: [
+                    _ImportSectionCard(
+                      title: 'Endpoint',
+                      child: Wrap(
+                        spacing: 12,
+                        runSpacing: 12,
+                        children: [
+                          SizedBox(
+                            width: 180,
+                            child: DropdownButtonFormField<String>(
+                              initialValue: protocol,
+                              decoration: _dialogDecoration('Protocol'),
+                              items: const [
+                                DropdownMenuItem(
+                                    value: 'vless', child: Text('VLESS')),
+                                DropdownMenuItem(
+                                    value: 'trojan', child: Text('Trojan')),
+                                DropdownMenuItem(
+                                    value: 'vmess', child: Text('VMess')),
+                                DropdownMenuItem(
+                                    value: 'shadowsocks',
+                                    child: Text('Shadowsocks')),
+                              ],
+                              onChanged: (value) => setState(() {
+                                protocol = value ?? 'vless';
+                              }),
+                            ),
+                          ),
+                          SizedBox(
+                            width: 240,
+                            child: TextField(
+                              controller: nameController,
+                              decoration: _dialogDecoration('Profile name'),
+                            ),
+                          ),
+                          SizedBox(
+                            width: 220,
+                            child: TextField(
+                              controller: addressController,
+                              decoration: _dialogDecoration('Address / host'),
+                            ),
+                          ),
+                          SizedBox(
+                            width: 120,
+                            child: TextField(
+                              controller: portController,
+                              keyboardType: TextInputType.number,
+                              decoration: _dialogDecoration('Port'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _ImportSectionCard(
+                      title: 'Transport and TLS',
+                      child: Wrap(
+                        spacing: 12,
+                        runSpacing: 12,
+                        children: [
+                          SizedBox(
+                            width: 180,
+                            child: DropdownButtonFormField<String>(
+                              initialValue: transport,
+                              decoration: _dialogDecoration('Transport'),
+                              items: const [
+                                DropdownMenuItem(
+                                    value: 'tcp', child: Text('TCP')),
+                                DropdownMenuItem(
+                                    value: 'ws', child: Text('WebSocket')),
+                                DropdownMenuItem(
+                                    value: 'grpc', child: Text('gRPC')),
+                                DropdownMenuItem(
+                                    value: 'httpupgrade',
+                                    child: Text('HTTPUpgrade')),
+                              ],
+                              onChanged: (value) => setState(() {
+                                transport = value ?? 'tcp';
+                              }),
+                            ),
+                          ),
+                          SizedBox(
+                            width: 180,
+                            child: DropdownButtonFormField<String>(
+                              initialValue: security,
+                              decoration: _dialogDecoration('Security'),
+                              items: const [
+                                DropdownMenuItem(
+                                    value: 'tls', child: Text('TLS')),
+                                DropdownMenuItem(
+                                    value: 'reality', child: Text('Reality')),
+                                DropdownMenuItem(
+                                    value: 'none', child: Text('None')),
+                              ],
+                              onChanged: (value) => setState(() {
+                                security = value ?? 'tls';
+                              }),
+                            ),
+                          ),
+                          SizedBox(
+                            width: 220,
+                            child: TextField(
+                              controller: sniController,
+                              decoration: _dialogDecoration('SNI'),
+                            ),
+                          ),
+                          SizedBox(
+                            width: 220,
+                            child: TextField(
+                              controller: alpnController,
+                              decoration: _dialogDecoration('ALPN'),
+                            ),
+                          ),
+                          SizedBox(
+                            width: 220,
+                            child: TextField(
+                              controller: fingerprintController,
+                              decoration:
+                                  _dialogDecoration('Fingerprint / uTLS'),
+                            ),
+                          ),
+                          SizedBox(
+                            width: 220,
+                            child: TextField(
+                              controller: flowController,
+                              decoration: _dialogDecoration('Flow'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _ImportSectionCard(
+                      title: 'Transport details',
+                      child: Wrap(
+                        spacing: 12,
+                        runSpacing: 12,
+                        children: [
+                          SizedBox(
+                            width: 260,
+                            child: TextField(
+                              controller: hostController,
+                              decoration: _dialogDecoration('Host / authority'),
+                            ),
+                          ),
+                          SizedBox(
+                            width: 260,
+                            child: TextField(
+                              controller: pathController,
+                              decoration: _dialogDecoration('Path / service'),
+                            ),
+                          ),
+                          SizedBox(
+                            width: 260,
+                            child: TextField(
+                              controller: realityPublicKeyController,
+                              decoration:
+                                  _dialogDecoration('Reality public key'),
+                            ),
+                          ),
+                          SizedBox(
+                            width: 220,
+                            child: TextField(
+                              controller: realityShortIdController,
+                              decoration: _dialogDecoration('Reality short ID'),
+                            ),
+                          ),
+                          SizedBox(
+                            width: 180,
+                            child: TextField(
+                              controller: spiderXController,
+                              decoration: _dialogDecoration('Reality spiderX'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _ImportSectionCard(
+                      title: 'Credentials',
+                      child: Wrap(
+                        spacing: 12,
+                        runSpacing: 12,
+                        children: [
+                          SizedBox(
+                            width: 280,
+                            child: TextField(
+                              controller: userIdController,
+                              decoration: _dialogDecoration('UUID / user'),
+                            ),
+                          ),
+                          SizedBox(
+                            width: 240,
+                            child: TextField(
+                              controller: passwordController,
+                              decoration: _dialogDecoration('Password'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              if (errorText != null) ...[
+                const SizedBox(height: 12),
+                Text(errorText!,
+                    style: const TextStyle(color: Color(0xFF8B3A3A))),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _submit,
+          child: const Text('Save'),
+        ),
+      ],
+    );
+  }
+
+  InputDecoration _dialogDecoration(String label) {
+    return InputDecoration(
+      labelText: label,
+      filled: true,
+      fillColor: const Color(0xFFF7F3EC),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(18),
+        borderSide: BorderSide.none,
+      ),
+    );
+  }
+
+  void _submit() {
+    try {
+      final profiles = mode == _ProfileImportMode.link
+          ? _parseProfilesInput(linkController.text.trim())
+          : [_manualProfile()];
+      Navigator.of(context).pop(profiles);
+    } catch (error) {
+      setState(() {
+        errorText = error.toString();
+      });
+    }
+  }
+
+  ServerProfile _manualProfile() {
+    final name = nameController.text.trim();
+    final address = addressController.text.trim();
+    final port = int.tryParse(portController.text.trim()) ?? 0;
+    if (name.isEmpty || address.isEmpty || port <= 0) {
+      throw Exception('Manual profile requires name, address and valid port.');
+    }
+    return ServerProfile(
+      id: _profileId(name),
+      name: name,
+      latencyMs: 0,
+      health: ProfileHealth.testing,
+      protocol: protocol,
+      address: address,
+      port: port,
+      sni: sniController.text.trim(),
+      security: security,
+      transport: transport,
+      alpn: alpnController.text.trim(),
+      fingerprint: fingerprintController.text.trim(),
+      flow: flowController.text.trim(),
+      host: hostController.text.trim(),
+      path: pathController.text.trim(),
+      realityPublicKey: realityPublicKeyController.text.trim(),
+      realityShortId: realityShortIdController.text.trim(),
+      spiderX: spiderXController.text.trim(),
+      userId: userIdController.text.trim(),
+      password: passwordController.text.trim(),
+    );
+  }
+}
+
+List<ServerProfile> _parseProfilesInput(String input) {
+  final normalized = input.trim();
+  if (normalized.isEmpty) {
+    throw Exception('Profile input is empty.');
+  }
+
+  final chunks = normalized
+      .split(RegExp(r'[\r\n]+'))
+      .map((line) => line.trim())
+      .where((line) => line.isNotEmpty)
+      .toList();
+
+  if (chunks.length <= 1) {
+    return [_parseProfileInput(normalized)];
+  }
+
+  return chunks.map(_parseProfileInput).toList();
+}
+
+ServerProfile _parseProfileInput(String input) {
+  final raw = input.trim();
+  if (raw.isEmpty) {
+    throw Exception('Profile input is empty.');
+  }
+
+  if (raw.startsWith('vmess://')) {
+    final payload = raw.substring('vmess://'.length);
+    final normalized = base64.normalize(payload);
+    final decoded = utf8.decode(base64Decode(normalized));
+    final json = jsonDecode(decoded) as Map<String, dynamic>;
+    return ServerProfile(
+      id: _profileId(json['ps']?.toString() ?? 'vmess-profile'),
+      name: json['ps']?.toString() ?? 'VMess profile',
+      latencyMs: 0,
+      health: ProfileHealth.testing,
+      protocol: 'vmess',
+      address: json['add']?.toString() ?? '',
+      port: int.tryParse(json['port']?.toString() ?? '') ?? 0,
+      sni: json['sni']?.toString() ?? json['host']?.toString() ?? '',
+      security: json['tls']?.toString() ?? json['scy']?.toString() ?? '',
+      transport: json['net']?.toString() ?? 'tcp',
+      alpn: json['alpn']?.toString() ?? '',
+      fingerprint: json['fp']?.toString() ?? '',
+      flow: json['flow']?.toString() ?? '',
+      host: json['host']?.toString() ?? '',
+      path: json['path']?.toString() ?? '',
+      realityPublicKey: json['pbk']?.toString() ?? '',
+      realityShortId: json['sid']?.toString() ?? '',
+      spiderX: json['spx']?.toString() ?? '',
+      userId: json['id']?.toString() ?? '',
+      rawLink: raw,
+    );
+  }
+
+  final uri = Uri.parse(raw);
+  final scheme = uri.scheme.toLowerCase();
+  if (scheme.isEmpty) {
+    throw Exception('Unsupported profile format.');
+  }
+  final userInfo = uri.userInfo.split(':');
+  final credential = userInfo.isNotEmpty ? userInfo.first : '';
+  final name = uri.fragment.isNotEmpty
+      ? Uri.decodeComponent(uri.fragment)
+      : (uri.host.isNotEmpty ? uri.host : '$scheme-profile');
+
+  return ServerProfile(
+    id: _profileId(name),
+    name: name,
+    latencyMs: 0,
+    health: ProfileHealth.testing,
+    protocol: scheme,
+    address: uri.host,
+    port: uri.port,
+    sni: uri.queryParameters['sni'] ??
+        uri.queryParameters['peer'] ??
+        uri.queryParameters['host'] ??
+        '',
+    security: uri.queryParameters['security'] ?? '',
+    transport: uri.queryParameters['type'] ??
+        uri.queryParameters['transport'] ??
+        'tcp',
+    alpn: uri.queryParameters['alpn'] ?? '',
+    fingerprint:
+        uri.queryParameters['fp'] ?? uri.queryParameters['fingerprint'] ?? '',
+    flow: uri.queryParameters['flow'] ?? '',
+    host: uri.queryParameters['host'] ?? uri.queryParameters['authority'] ?? '',
+    path:
+        uri.queryParameters['path'] ?? uri.queryParameters['serviceName'] ?? '',
+    realityPublicKey:
+        uri.queryParameters['pbk'] ?? uri.queryParameters['publicKey'] ?? '',
+    realityShortId:
+        uri.queryParameters['sid'] ?? uri.queryParameters['shortId'] ?? '',
+    spiderX: uri.queryParameters['spx'] ?? '',
+    userId: scheme == 'trojan' ? '' : credential,
+    password: scheme == 'trojan' ? credential : '',
+    rawLink: raw,
+  );
+}
+
+String _profileId(String seed) {
+  final normalized = seed
+      .toLowerCase()
+      .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
+      .replaceAll(RegExp(r'-{2,}'), '-')
+      .replaceAll(RegExp(r'^-|-$'), '');
+  final suffix = DateTime.now().millisecondsSinceEpoch.toString();
+  return normalized.isEmpty ? suffix : '$normalized-$suffix';
 }

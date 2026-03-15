@@ -1,5 +1,5 @@
 name: xray_desktop_ui
-description: Flutter UI shell for a minimal Xray client.
+description: Troodi VPN desktop UI for Xray-based routing.
 publish_to: "none"
 version: 0.1.0+1
 

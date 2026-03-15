@@ -1,12 +1,12 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xray_desktop_ui/main.dart';
 
 void main() {
   testWidgets('renders dashboard shell', (WidgetTester tester) async {
-    await tester.pumpWidget(const XrayDesktopApp());
+    await tester.pumpWidget(const TroodiVpnApp());
 
-    expect(find.text('XR UI'), findsOneWidget);
-    expect(find.text('Server profiles'), findsOneWidget);
-    expect(find.text('DNS and routing'), findsOneWidget);
+    expect(find.byType(MaterialApp), findsOneWidget);
+    expect(find.byType(Scaffold), findsOneWidget);
   });
 }

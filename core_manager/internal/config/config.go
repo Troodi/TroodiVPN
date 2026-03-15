@@ -34,11 +34,27 @@ const (
 )
 
 type ServerProfile struct {
-	ID        string        `json:"id"`
-	Name      string        `json:"name"`
-	LatencyMS int           `json:"latencyMs"`
-	Health    ProfileHealth `json:"health"`
-	Protocol  string        `json:"protocol"`
+	ID               string        `json:"id"`
+	Name             string        `json:"name"`
+	LatencyMS        int           `json:"latencyMs"`
+	Health           ProfileHealth `json:"health"`
+	Protocol         string        `json:"protocol"`
+	Address          string        `json:"address"`
+	Port             int           `json:"port"`
+	SNI              string        `json:"sni"`
+	Security         string        `json:"security"`
+	Transport        string        `json:"transport"`
+	ALPN             string        `json:"alpn"`
+	Fingerprint      string        `json:"fingerprint"`
+	Flow             string        `json:"flow"`
+	Host             string        `json:"host"`
+	Path             string        `json:"path"`
+	RealityPublicKey string        `json:"realityPublicKey"`
+	RealityShortID   string        `json:"realityShortId"`
+	SpiderX          string        `json:"spiderX"`
+	UserID           string        `json:"userId"`
+	Password         string        `json:"password"`
+	RawLink          string        `json:"rawLink"`
 }
 
 type AppConfig struct {
@@ -68,9 +84,53 @@ func DefaultAppConfig() AppConfig {
 		DirectDomains:      []string{"bank.ru", "gosuslugi.ru", "youtube.com"},
 		BlockedDomains:     []string{"doubleclick.net", "ads.example.com"},
 		Profiles: []ServerProfile{
-			{ID: "main-reality", Name: "Main Reality", LatencyMS: 48, Health: ProfileHealthy, Protocol: "vless-reality"},
-			{ID: "backup-nl", Name: "Backup Netherlands", LatencyMS: 63, Health: ProfileHealthy, Protocol: "trojan"},
-			{ID: "usa-streaming", Name: "USA Streaming", LatencyMS: 124, Health: ProfileTesting, Protocol: "vmess"},
+			{
+				ID:               "main-reality",
+				Name:             "Main Reality",
+				LatencyMS:        48,
+				Health:           ProfileHealthy,
+				Protocol:         "vless",
+				Address:          "main.example.com",
+				Port:             443,
+				SNI:              "main.example.com",
+				Security:         "reality",
+				Transport:        "tcp",
+				Fingerprint:      "chrome",
+				RealityPublicKey: "example-public-key",
+				RealityShortID:   "6ba85179e30d4fc2",
+				SpiderX:          "/",
+			},
+			{
+				ID:          "backup-nl",
+				Name:        "Backup Netherlands",
+				LatencyMS:   63,
+				Health:      ProfileHealthy,
+				Protocol:    "trojan",
+				Address:     "nl.example.com",
+				Port:        443,
+				SNI:         "cdn.example.com",
+				Security:    "tls",
+				Transport:   "ws",
+				Host:        "cdn.example.com",
+				Path:        "/ws",
+				Fingerprint: "chrome",
+			},
+			{
+				ID:          "usa-streaming",
+				Name:        "USA Streaming",
+				LatencyMS:   124,
+				Health:      ProfileTesting,
+				Protocol:    "vmess",
+				Address:     "us.example.com",
+				Port:        443,
+				SNI:         "video.example.com",
+				Security:    "tls",
+				Transport:   "grpc",
+				Host:        "video.example.com",
+				Path:        "streaming",
+				Fingerprint: "chrome",
+				ALPN:        "h2,http/1.1",
+			},
 		},
 	}
 }

@@ -3,8 +3,11 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"os"
+	"time"
 
 	"github.com/troodi/xray-desktop/core-manager/internal/config"
+	"github.com/troodi/xray-desktop/core-manager/internal/platform"
 	xruntime "github.com/troodi/xray-desktop/core-manager/internal/runtime"
 	"github.com/troodi/xray-desktop/core-manager/internal/xray"
 )
@@ -26,6 +29,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/v1/disconnect", s.handleDisconnect)
 	mux.HandleFunc("GET /api/v1/xray-config", s.handleGetXrayConfig)
 	mux.HandleFunc("GET /api/v1/logs", s.handleGetLogs)
+	mux.HandleFunc("GET /api/v1/admin-status", s.handleGetAdminStatus)
+	mux.HandleFunc("POST /api/v1/request-admin", s.handleRequestAdmin)
 	return withCORS(mux)
 }
 
@@ -90,6 +95,49 @@ func (s *Server) handleGetLogs(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"logs": s.runtime.Status().Logs,
 	})
+}
+
+func (s *Server) handleGetAdminStatus(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{
+		"elevated": platform.IsElevated(),
+	})
+}
+
+func (s *Server) handleRequestAdmin(w http.ResponseWriter, _ *http.Request) {
+	if platform.IsElevated() {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"elevated":  true,
+			"requested": false,
+		})
+		return
+	}
+
+	executablePath, err := os.Executable()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	workingDirectory, err := os.Getwd()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if err := platform.RequestElevation(executablePath, workingDirectory); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"elevated":  false,
+		"requested": true,
+	})
+
+	go func() {
+		time.Sleep(800 * time.Millisecond)
+		os.Exit(0)
+	}()
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {

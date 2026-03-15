@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -155,6 +157,9 @@ class RuntimeSnapshot {
     required this.configPath,
     required this.lastError,
     required this.lastExit,
+    required this.mode,
+    required this.latencyMs,
+    required this.elevated,
     required this.logs,
   });
 
@@ -165,6 +170,9 @@ class RuntimeSnapshot {
     configPath: '',
     lastError: '',
     lastExit: '',
+    mode: 'proxy',
+    latencyMs: 0,
+    elevated: false,
     logs: <String>[],
   );
 
@@ -174,7 +182,12 @@ class RuntimeSnapshot {
   final String configPath;
   final String lastError;
   final String lastExit;
+  final String mode;
+  final int latencyMs;
+  final bool elevated;
   final List<String> logs;
+
+  bool get isSafeTunMode => mode == 'tun' && latencyMs == 0;
 
   factory RuntimeSnapshot.fromJson(Map<String, dynamic> json) {
     return RuntimeSnapshot(
@@ -184,6 +197,9 @@ class RuntimeSnapshot {
       configPath: json['configPath'] as String? ?? '',
       lastError: json['lastError'] as String? ?? '',
       lastExit: json['lastExit'] as String? ?? '',
+      mode: json['mode'] as String? ?? 'proxy',
+      latencyMs: json['latencyMs'] as int? ?? 0,
+      elevated: json['elevated'] as bool? ?? false,
       logs: _stringList(json['logs']),
     );
   }
@@ -238,6 +254,20 @@ class BackendClient {
     return _decodeSnapshot(response);
   }
 
+  Future<bool> getAdminStatus() async {
+    final response = await http.get(Uri.parse('$baseUrl/api/v1/admin-status'));
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    return body['elevated'] as bool? ?? false;
+  }
+
+  Future<void> requestAdmin() async {
+    final response =
+        await http.post(Uri.parse('$baseUrl/api/v1/request-admin'));
+    if (response.statusCode >= 400) {
+      throw Exception(response.body);
+    }
+  }
+
   DashboardSnapshot _decodeSnapshot(http.Response response) {
     Map<String, dynamic> body = <String, dynamic>{};
     if (response.body.isNotEmpty) {
@@ -255,6 +285,118 @@ class BackendClient {
     }
     return DashboardSnapshot.fromJson(body);
   }
+}
+
+class BackendRuntime {
+  BackendRuntime(this.backend);
+
+  final BackendClient backend;
+  Process? _process;
+  bool _launchedByApp = false;
+  bool _starting = false;
+
+  Future<void> ensureRunning() async {
+    if (await _isReachable()) {
+      return;
+    }
+    if (_starting) {
+      await _waitUntilReachable();
+      return;
+    }
+
+    _starting = true;
+    try {
+      if (await _isReachable()) {
+        return;
+      }
+
+      final executable = await _findBackendExecutable();
+      if (executable == null) {
+        throw Exception(
+          'core-manager.exe not found. Build it first or place it next to the app.',
+        );
+      }
+
+      _process = await Process.start(
+        executable.path,
+        const [],
+        workingDirectory: executable.parent.path,
+        mode: ProcessStartMode.normal,
+      );
+      _launchedByApp = true;
+      unawaited(_process!.stdout.drain<void>());
+      unawaited(_process!.stderr.drain<void>());
+
+      await _waitUntilReachable();
+    } finally {
+      _starting = false;
+    }
+  }
+
+  Future<void> dispose() async {
+    if (_launchedByApp && _process != null) {
+      _process!.kill();
+      _process = null;
+      _launchedByApp = false;
+    }
+  }
+
+  Future<bool> _isReachable() async {
+    try {
+      await backend.getState();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _waitUntilReachable() async {
+    for (var attempt = 0; attempt < 20; attempt++) {
+      if (await _isReachable()) {
+        return;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 350));
+    }
+    throw Exception('Backend did not start on http://127.0.0.1:8080');
+  }
+
+  Future<File?> _findBackendExecutable() async {
+    final executableName =
+        Platform.isWindows ? 'core-manager.exe' : 'core-manager';
+    final appDirs = <String>{
+      File(Platform.resolvedExecutable).parent.path,
+      File(Platform.executable).parent.path,
+      Directory.current.path,
+    };
+    final candidates = <String>[
+      for (final appDir in appDirs) _joinPath(appDir, executableName),
+      for (final appDir in appDirs) _joinPath(appDir, 'data', executableName),
+      _joinPath(
+          Directory.current.path, '..', 'core_manager', 'bin', executableName),
+      _joinPath(Directory.current.path, 'core_manager', 'bin', executableName),
+    ];
+
+    for (final path in candidates) {
+      final file = File(path);
+      if (await file.exists()) {
+        return file;
+      }
+    }
+
+    return null;
+  }
+}
+
+String _joinPath(String first,
+    [String? second, String? third, String? fourth, String? fifth]) {
+  final parts = <String>[
+    first,
+    if (second != null) second,
+    if (third != null) third,
+    if (fourth != null) fourth,
+    if (fifth != null) fifth,
+  ];
+  return parts.join(Platform.pathSeparator);
 }
 
 ServerProfile _serverProfileFromJson(Map<String, dynamic> json) {
@@ -320,6 +462,9 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   final BackendClient backend = const BackendClient();
+  late final BackendRuntime backendRuntime;
+  Timer? pollTimer;
+  bool isRefreshing = false;
 
   ConnectionStateValue connection = ConnectionStateValue.disconnected;
   RoutingMode routingMode = RoutingMode.blacklist;
@@ -349,20 +494,41 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void initState() {
     super.initState();
+    backendRuntime = BackendRuntime(backend);
     proxyController = TextEditingController();
     directController = TextEditingController();
     blockedController = TextEditingController();
     searchController = TextEditingController();
-    _refreshState();
+    _bootstrap();
+    pollTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      _refreshState(silent: true);
+    });
   }
 
   @override
   void dispose() {
+    pollTimer?.cancel();
+    unawaited(backendRuntime.dispose());
     proxyController.dispose();
     directController.dispose();
     blockedController.dispose();
     searchController.dispose();
     super.dispose();
+  }
+
+  Future<void> _bootstrap() async {
+    try {
+      await backendRuntime.ensureRunning();
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+          errorMessage = error.toString();
+        });
+      }
+      return;
+    }
+    await _refreshState();
   }
 
   ServerProfile get activeProfile => profiles.firstWhere(
@@ -527,11 +693,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Future<void> _refreshState() async {
-    setState(() {
-      isLoading = true;
-      errorMessage = null;
-    });
+  Future<void> _refreshState({bool silent = false}) async {
+    if (isRefreshing || isBusy) {
+      return;
+    }
+
+    isRefreshing = true;
+    if (!silent) {
+      setState(() {
+        isLoading = true;
+        errorMessage = null;
+      });
+    }
 
     try {
       final snapshot = await backend.getState();
@@ -541,17 +714,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
       setState(() {
         _applySnapshot(snapshot);
-        isLoading = false;
+        if (!silent) {
+          isLoading = false;
+        }
       });
     } catch (error) {
       if (!mounted) {
         return;
       }
 
-      setState(() {
-        isLoading = false;
-        errorMessage = error.toString();
-      });
+      if (!silent) {
+        setState(() {
+          isLoading = false;
+          errorMessage = error.toString();
+        });
+      }
+    } finally {
+      isRefreshing = false;
     }
   }
 
@@ -613,6 +792,57 @@ class _DashboardScreenState extends State<DashboardScreen> {
         });
       }
     }
+  }
+
+  Future<bool> _ensureAdminForTun() async {
+    final elevated = runtimeStatus.elevated || await backend.getAdminStatus();
+    if (elevated) {
+      return true;
+    }
+
+    try {
+      await backend.requestAdmin();
+    } catch (error) {
+      final message = error.toString().toLowerCase();
+      final reconnectExpected = message.contains('socket') ||
+          message.contains('connection') ||
+          message.contains('connection reset');
+      if (!reconnectExpected) {
+        if (mounted) {
+          _showMessage(error.toString(), isError: true);
+        }
+        return false;
+      }
+    }
+
+    if (mounted) {
+      _showMessage(
+          'Approve the administrator prompt. Waiting for elevated backend...');
+    }
+
+    for (var attempt = 0; attempt < 20; attempt++) {
+      await Future<void>.delayed(const Duration(seconds: 1));
+      try {
+        final snapshot = await backend.getState();
+        if (snapshot.runtime.elevated) {
+          if (mounted) {
+            setState(() {
+              _applySnapshot(snapshot);
+              errorMessage = null;
+            });
+          }
+          return true;
+        }
+      } catch (_) {
+        // Ignore short reconnect gaps while the backend restarts elevated.
+      }
+    }
+
+    if (mounted) {
+      _showMessage('Failed to reconnect to an elevated backend.',
+          isError: true);
+    }
+    return false;
   }
 
   void _applySnapshot(DashboardSnapshot snapshot) {
@@ -704,10 +934,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
           directCount: directDomains.length,
           runtimeRunning: runtimeStatus.running,
           runtimeInfo: runtimeStatus.running
-              ? 'Xray pid ${runtimeStatus.pid}'
+              ? '${runtimeStatus.mode.toUpperCase()} • ${runtimeStatus.latencyMs > 0 ? '${runtimeStatus.latencyMs} ms' : tunEnabled ? 'safe test mode' : 'ping n/a'}'
               : runtimeStatus.lastError.isNotEmpty
                   ? runtimeStatus.lastError
                   : 'Core offline',
+          latencyMs: runtimeStatus.latencyMs,
           onToggleConnection: _toggleConnection,
           onModeChanged: (value) async {
             await _saveConfig(_currentConfig().copyWith(routingMode: value));
@@ -1148,20 +1379,38 @@ class _DashboardScreenState extends State<DashboardScreen> {
           child: Column(
             children: [
               _SwitchRow(
-                title: 'System proxy',
-                description: 'Configure OS proxy automatically.',
+                title: 'Proxy mode',
+                description:
+                    'Route traffic through the local mixed proxy and system proxy.',
                 value: systemProxyEnabled,
                 onChanged: (value) => _saveConfig(
-                  _currentConfig().copyWith(systemProxyEnabled: value),
+                  _currentConfig().copyWith(
+                    systemProxyEnabled: value,
+                    tunEnabled: value ? false : tunEnabled,
+                  ),
                 ),
               ),
               const Divider(height: 24),
               _SwitchRow(
                 title: 'TUN mode',
-                description: 'Route system traffic through a virtual adapter.',
+                description:
+                    'Safe test mode by default: starts the virtual adapter without changing system routes. Requires administrator rights.',
                 value: tunEnabled,
-                onChanged: (value) =>
-                    _saveConfig(_currentConfig().copyWith(tunEnabled: value)),
+                onChanged: (value) async {
+                  if (value) {
+                    final elevated = await _ensureAdminForTun();
+                    if (!elevated) {
+                      return;
+                    }
+                  }
+
+                  await _saveConfig(
+                    _currentConfig().copyWith(
+                      tunEnabled: value,
+                      systemProxyEnabled: value ? false : systemProxyEnabled,
+                    ),
+                  );
+                },
               ),
               const Divider(height: 24),
               _SwitchRow(
@@ -1206,8 +1455,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   color: const Color(0xFFEAF1ED),
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: const Text(
-                  'Recommended default: Auto. Keep DNS aligned with routing to avoid leaks and rule mismatches.',
+                child: Text(
+                  tunEnabled
+                      ? 'TUN is currently in safe test mode: the adapter starts, but system routes stay unchanged so the host internet is not interrupted.'
+                      : 'Recommended default: Auto. Keep DNS aligned with routing to avoid leaks and rule mismatches.',
                 ),
               ),
               const SizedBox(height: 16),
@@ -1382,6 +1633,7 @@ class _HeroCard extends StatelessWidget {
     required this.directCount,
     required this.runtimeRunning,
     required this.runtimeInfo,
+    required this.latencyMs,
     required this.onToggleConnection,
     required this.onModeChanged,
   });
@@ -1393,6 +1645,7 @@ class _HeroCard extends StatelessWidget {
   final int directCount;
   final bool runtimeRunning;
   final String runtimeInfo;
+  final int latencyMs;
   final Future<void> Function() onToggleConnection;
   final Future<void> Function(RoutingMode) onModeChanged;
 
@@ -1428,7 +1681,9 @@ class _HeroCard extends StatelessWidget {
                 spacing: 10,
                 runSpacing: 10,
                 children: [
-                  _ChipLabel(label: 'Latency ${profile.latencyMs} ms'),
+                  _ChipLabel(
+                    label: latencyMs > 0 ? 'Ping $latencyMs ms' : 'Ping n/a',
+                  ),
                   _ChipLabel(
                     label: runtimeRunning ? 'Core running' : 'Core stopped',
                   ),

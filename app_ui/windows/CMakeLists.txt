@@ -5,6 +5,12 @@ project(xray_desktop_ui LANGUAGES CXX)
 # The name of the executable created for the application. Change this to change
 # the on-disk name of your application.
 set(BINARY_NAME "xray_desktop_ui")
+set(REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../..")
+set(CORE_MANAGER_DIR "${REPO_ROOT}/core_manager")
+set(CORE_MANAGER_BINARY "${CORE_MANAGER_DIR}/bin/core-manager.exe")
+set(XRAY_RUNTIME_DIR "${REPO_ROOT}/xray_runtime/bin/windows")
+set(XRAY_BINARY "${XRAY_RUNTIME_DIR}/xray.exe")
+set(WINTUN_BINARY "${XRAY_RUNTIME_DIR}/wintun.dll")
 
 # Explicitly opt in to modern CMake behaviors to avoid warnings with recent
 # versions of CMake.
@@ -49,6 +55,15 @@ endfunction()
 set(FLUTTER_MANAGED_DIR "${CMAKE_CURRENT_SOURCE_DIR}/flutter")
 add_subdirectory(${FLUTTER_MANAGED_DIR})
 
+execute_process(
+  COMMAND go build -o "${CORE_MANAGER_BINARY}" .\\cmd\\core-manager
+  WORKING_DIRECTORY "${CORE_MANAGER_DIR}"
+  RESULT_VARIABLE CORE_MANAGER_BUILD_RESULT
+)
+if(NOT CORE_MANAGER_BUILD_RESULT EQUAL 0)
+  message(FATAL_ERROR "Failed to build core-manager.exe")
+endif()
+
 # Application build; see runner/CMakeLists.txt.
 add_subdirectory("runner")
 
@@ -79,6 +94,13 @@ install(FILES "${FLUTTER_ICU_DATA_FILE}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}
   COMPONENT Runtime)
 
 install(FILES "${FLUTTER_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+  COMPONENT Runtime)
+
+install(FILES
+  "${CORE_MANAGER_BINARY}"
+  "${XRAY_BINARY}"
+  "${WINTUN_BINARY}"
+  DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
   COMPONENT Runtime)
 
 if(PLUGIN_BUNDLED_LIBRARIES)

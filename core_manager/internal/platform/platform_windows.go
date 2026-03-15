@@ -36,6 +36,8 @@ type TUNOptions struct {
 	MTU            int
 	DNSServers     []string
 	ManageRoutes   bool
+	DefaultRoute   *DefaultRoute
+	BypassCIDRs    []string
 }
 
 type TUNState struct {
@@ -45,6 +47,7 @@ type TUNState struct {
 	PrefixLength   int
 	DNSServers     []string
 	RoutePrefixes  []string
+	BypassCIDRs    []string
 }
 
 func DefaultTUNOptions() TUNOptions {
@@ -251,7 +254,12 @@ func PrepareTUN(opts TUNOptions) (*TUNState, error) {
 		return nil, err
 	}
 	routePrefixes := []string{}
+	bypassCIDRs := []string{}
 	if opts.ManageRoutes {
+		if err := ensureBypassRoutes(opts); err != nil {
+			return nil, err
+		}
+		bypassCIDRs = append(bypassCIDRs, opts.BypassCIDRs...)
 		if err := ensureSplitDefaultRoutes(opts.InterfaceAlias); err != nil {
 			return nil, err
 		}
@@ -265,6 +273,7 @@ func PrepareTUN(opts TUNOptions) (*TUNState, error) {
 		PrefixLength:   opts.PrefixLength,
 		DNSServers:     append([]string(nil), opts.DNSServers...),
 		RoutePrefixes:  routePrefixes,
+		BypassCIDRs:    bypassCIDRs,
 	}, nil
 }
 
@@ -276,6 +285,11 @@ func CleanupTUN(state *TUNState) error {
 	var errs []string
 	for _, prefix := range state.RoutePrefixes {
 		if err := removeNetRoute(state.InterfaceAlias, prefix); err != nil {
+			errs = append(errs, err.Error())
+		}
+	}
+	for _, prefix := range state.BypassCIDRs {
+		if err := removeNetRouteByPrefix(prefix); err != nil {
 			errs = append(errs, err.Error())
 		}
 	}
@@ -446,6 +460,22 @@ func ensureSplitDefaultRoutes(alias string) error {
 	return nil
 }
 
+func ensureBypassRoutes(opts TUNOptions) error {
+	if opts.DefaultRoute == nil {
+		return errors.New("default route is required for managed TUN routes")
+	}
+	if opts.DefaultRoute.InterfaceIndex == 0 || opts.DefaultRoute.NextHop == "" {
+		return errors.New("default route is missing interface index or next hop")
+	}
+
+	for _, prefix := range opts.BypassCIDRs {
+		if err := ensureGatewayRoute(prefix, opts.DefaultRoute); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func ensureNetRoute(alias, prefix string) error {
 	script := fmt.Sprintf(`
 $existing = Get-NetRoute -InterfaceAlias '%s' -DestinationPrefix '%s' -ErrorAction SilentlyContinue
@@ -464,6 +494,29 @@ if ($null -ne $existing) {
   $existing | Remove-NetRoute -Confirm:$false
 }
 `, escapeSingleQuotes(alias), prefix)
+
+	return runPowerShell(script)
+}
+
+func ensureGatewayRoute(prefix string, route *DefaultRoute) error {
+	script := fmt.Sprintf(`
+$existing = Get-NetRoute -DestinationPrefix '%s' -ErrorAction SilentlyContinue |
+  Where-Object { $_.ifIndex -eq %d -and $_.NextHop -eq '%s' }
+if ($null -eq $existing) {
+  New-NetRoute -DestinationPrefix '%s' -InterfaceIndex %d -NextHop '%s' -RouteMetric 1 -PolicyStore ActiveStore | Out-Null
+}
+`, prefix, route.InterfaceIndex, escapeSingleQuotes(route.NextHop), prefix, route.InterfaceIndex, escapeSingleQuotes(route.NextHop))
+
+	return runPowerShell(script)
+}
+
+func removeNetRouteByPrefix(prefix string) error {
+	script := fmt.Sprintf(`
+$existing = Get-NetRoute -DestinationPrefix '%s' -ErrorAction SilentlyContinue
+if ($null -ne $existing) {
+  $existing | Remove-NetRoute -Confirm:$false
+}
+`, prefix)
 
 	return runPowerShell(script)
 }

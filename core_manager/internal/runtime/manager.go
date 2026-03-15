@@ -167,6 +167,7 @@ func (m *Manager) startLocked(cfg config.AppConfig) error {
 		return errors.New("TUN mode requires administrator rights")
 	}
 	buildOptions := xray.DefaultBuildOptions()
+	tunOptions := platform.DefaultTUNOptions()
 	if cfg.TUNEnabled {
 		if err := platform.EnsureWintunDLL(m.binaryPath); err != nil {
 			return err
@@ -176,9 +177,17 @@ func (m *Manager) startLocked(cfg config.AppConfig) error {
 		if err != nil {
 			return err
 		}
+		activeProfile := activeProfile(cfg)
 		buildOptions.BindInterface = defaultRoute.InterfaceAlias
-		tunOptions := platform.DefaultTUNOptions()
-		tunOptions.ManageRoutes = unsafeFullTUNRoutesEnabled()
+		tunOptions.ManageRoutes = true
+		tunOptions.DefaultRoute = defaultRoute
+		if tunOptions.ManageRoutes {
+			bypassCIDRs, err := resolveBypassCIDRs(activeProfile)
+			if err != nil {
+				return err
+			}
+			tunOptions.BypassCIDRs = bypassCIDRs
+		}
 		buildOptions.TUNInterface = tunOptions.InterfaceAlias
 		buildOptions.TUNMTU = tunOptions.MTU
 	}
@@ -219,8 +228,6 @@ func (m *Manager) startLocked(cfg config.AppConfig) error {
 		m.appendLogLocked("system proxy error: " + err.Error())
 	}
 	if cfg.TUNEnabled {
-		tunOptions := platform.DefaultTUNOptions()
-		tunOptions.ManageRoutes = unsafeFullTUNRoutesEnabled()
 		tunState, err := platform.PrepareTUN(tunOptions)
 		if err != nil {
 			_ = m.stopLocked()
@@ -228,6 +235,9 @@ func (m *Manager) startLocked(cfg config.AppConfig) error {
 		}
 		m.tunState = tunState
 		if tunOptions.ManageRoutes {
+			if len(tunState.BypassCIDRs) > 0 {
+				m.appendLogLocked(fmt.Sprintf("[%s] pinned upstream routes outside TUN: %s", time.Now().Format(time.RFC3339), strings.Join(tunState.BypassCIDRs, ", ")))
+			}
 			m.appendLogLocked(fmt.Sprintf("[%s] TUN adapter %s configured with system routes", time.Now().Format(time.RFC3339), tunState.InterfaceAlias))
 		} else {
 			m.appendLogLocked(fmt.Sprintf("[%s] TUN adapter %s configured in safe test mode (routes unchanged)", time.Now().Format(time.RFC3339), tunState.InterfaceAlias))
@@ -377,6 +387,47 @@ func (m *Manager) appendLogLocked(line string) {
 	}
 }
 
+func activeProfile(cfg config.AppConfig) config.ServerProfile {
+	for _, profile := range cfg.Profiles {
+		if profile.ID == cfg.ActiveProfileID {
+			return profile
+		}
+	}
+	if len(cfg.Profiles) > 0 {
+		return cfg.Profiles[0]
+	}
+	return config.ServerProfile{}
+}
+
+func resolveBypassCIDRs(profile config.ServerProfile) ([]string, error) {
+	if profile.Address == "" {
+		return nil, errors.New("active profile address is required for full TUN mode")
+	}
+
+	if ip := net.ParseIP(profile.Address); ip != nil {
+		if ipv4 := ip.To4(); ipv4 != nil {
+			return []string{ipv4.String() + "/32"}, nil
+		}
+		return []string{ip.String() + "/128"}, nil
+	}
+
+	ips, err := net.LookupIP(profile.Address)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve upstream host %q for full TUN mode: %w", profile.Address, err)
+	}
+
+	cidrs := make([]string, 0, len(ips))
+	for _, ip := range ips {
+		if ipv4 := ip.To4(); ipv4 != nil {
+			cidrs = append(cidrs, ipv4.String()+"/32")
+		}
+	}
+	if len(cidrs) == 0 {
+		return nil, fmt.Errorf("no IPv4 addresses resolved for upstream host %q", profile.Address)
+	}
+	return cidrs, nil
+}
+
 func (m *Manager) isRunningLocked() bool {
 	return m.running && m.cmd != nil && m.cmd.Process != nil
 }
@@ -492,9 +543,4 @@ func queryGoogleDNS(conn net.Conn) error {
 
 	_, err := dnsConn.ReadMsg()
 	return err
-}
-
-func unsafeFullTUNRoutesEnabled() bool {
-	value := strings.TrimSpace(strings.ToLower(os.Getenv("XRAY_DESKTOP_UNSAFE_TUN_ROUTES")))
-	return value == "1" || value == "true" || value == "yes"
 }

@@ -1025,7 +1025,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           directCount: directDomains.length,
           runtimeRunning: runtimeStatus.running,
           runtimeInfo: runtimeStatus.running
-              ? '${runtimeStatus.mode.toUpperCase()} • ${runtimeStatus.latencyMs > 0 ? '${runtimeStatus.latencyMs} ms' : tunEnabled ? 'safe test mode' : 'ping n/a'}'
+              ? '${runtimeStatus.mode.toUpperCase()} • ${runtimeStatus.latencyMs > 0 ? '${runtimeStatus.latencyMs} ms' : 'ping n/a'}'
               : runtimeStatus.lastError.isNotEmpty
                   ? runtimeStatus.lastError
                   : 'Core offline',
@@ -1530,7 +1530,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               _SwitchRow(
                 title: 'TUN mode',
                 description:
-                    'Safe test mode by default: starts the virtual adapter without changing system routes. Requires administrator rights.',
+                    'Routes system traffic through the Xray virtual adapter. Requires administrator rights.',
                 value: tunEnabled,
                 onChanged: (value) async {
                   if (value) {
@@ -1593,7 +1593,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 child: Text(
                   tunEnabled
-                      ? 'TUN is currently in safe test mode: the adapter starts, but system routes stay unchanged so the host internet is not interrupted.'
+                      ? 'TUN is active in full routing mode. Upstream routes are pinned outside the tunnel to reduce loop risk.'
                       : 'Recommended default: Auto. Keep DNS aligned with routing to avoid leaks and rule mismatches.',
                 ),
               ),

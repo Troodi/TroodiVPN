@@ -2429,13 +2429,19 @@ class _NavButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
+    return GestureDetector(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(22),
-      child: Ink(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
         decoration: BoxDecoration(
-          color: selected ? const Color(0xFF173C4A) : Colors.transparent,
+          color: selected ? const Color(0xFF173C4A) : const Color(0x00FFFFFF),
+          border: Border.all(
+            color: selected
+                ? const Color(0xFF173C4A)
+                : Colors.black.withValues(alpha: 0.06),
+          ),
           borderRadius: BorderRadius.circular(22),
         ),
         child: Row(

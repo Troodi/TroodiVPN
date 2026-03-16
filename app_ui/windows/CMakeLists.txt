@@ -56,7 +56,7 @@ set(FLUTTER_MANAGED_DIR "${CMAKE_CURRENT_SOURCE_DIR}/flutter")
 add_subdirectory(${FLUTTER_MANAGED_DIR})
 
 execute_process(
-  COMMAND go build -o "${CORE_MANAGER_BINARY}" .\\cmd\\core-manager
+  COMMAND go build -ldflags -H=windowsgui -o "${CORE_MANAGER_BINARY}" .\\cmd\\core-manager
   WORKING_DIRECTORY "${CORE_MANAGER_DIR}"
   RESULT_VARIABLE CORE_MANAGER_BUILD_RESULT
 )

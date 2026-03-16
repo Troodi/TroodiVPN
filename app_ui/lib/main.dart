@@ -177,7 +177,7 @@ class AppUi {
     return IconButton.styleFrom(
       foregroundColor: color,
       shape: const CircleBorder(),
-      padding: const EdgeInsets.all(44),
+      padding: const EdgeInsets.all(38),
       disabledForegroundColor: const Color(0xFF9AA0AE).withValues(alpha: 0.7),
     );
   }
@@ -335,6 +335,10 @@ class RuntimeSnapshot {
     required this.lastExit,
     required this.mode,
     required this.latencyMs,
+    required this.publicIp,
+    required this.downloadBps,
+    required this.uploadBps,
+    required this.ready,
     required this.elevated,
     required this.logs,
   });
@@ -348,6 +352,10 @@ class RuntimeSnapshot {
     lastExit: '',
     mode: 'proxy',
     latencyMs: 0,
+    publicIp: '',
+    downloadBps: 0,
+    uploadBps: 0,
+    ready: false,
     elevated: false,
     logs: <String>[],
   );
@@ -360,6 +368,10 @@ class RuntimeSnapshot {
   final String lastExit;
   final String mode;
   final int latencyMs;
+  final String publicIp;
+  final int downloadBps;
+  final int uploadBps;
+  final bool ready;
   final bool elevated;
   final List<String> logs;
 
@@ -375,6 +387,10 @@ class RuntimeSnapshot {
       lastExit: json['lastExit'] as String? ?? '',
       mode: json['mode'] as String? ?? 'proxy',
       latencyMs: json['latencyMs'] as int? ?? 0,
+      publicIp: json['publicIp'] as String? ?? '',
+      downloadBps: json['downloadBps'] as int? ?? 0,
+      uploadBps: json['uploadBps'] as int? ?? 0,
+      ready: json['ready'] as bool? ?? false,
       elevated: json['elevated'] as bool? ?? false,
       logs: _stringList(json['logs']),
     );
@@ -685,6 +701,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   AppPage selectedPage = AppPage.home;
   bool isLoading = true;
   bool isBusy = false;
+  bool isConnecting = false;
   String? errorMessage;
   RuntimeSnapshot runtimeStatus = RuntimeSnapshot.empty;
 
@@ -699,8 +716,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   List<ServerProfile> profiles = const [];
 
   String activeProfileId = '';
-  String externalIp = '';
-  bool isLoadingExternalIp = false;
 
   @override
   void initState() {
@@ -915,10 +930,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 width: 280,
                 child: _Sidebar(
                   connection: connection,
+                  isConnecting: isConnecting,
                   routingMode: routingMode,
                   dnsMode: dnsMode,
                   latencyMs: runtimeStatus.latencyMs,
-                  externalIp: externalIp,
+                  externalIp: runtimeStatus.publicIp,
+                  downloadBps: runtimeStatus.downloadBps,
+                  uploadBps: runtimeStatus.uploadBps,
                   hasActiveProfile: hasActiveProfile,
                   activeProfileName: hasActiveProfile ? activeProfile.name : '',
                   selectedPage: selectedPage,
@@ -992,7 +1010,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
           isLoading = false;
         }
       });
-      unawaited(_syncExternalIp());
     } catch (error) {
       if (!mounted) {
         return;
@@ -1047,7 +1064,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       setState(() {
         _applySnapshot(snapshot);
       });
-      unawaited(_syncExternalIp());
     } catch (error) {
       if (!mounted) {
         return;
@@ -1070,6 +1086,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     setState(() {
       isBusy = true;
+      isConnecting = connection == ConnectionStateValue.disconnected;
       errorMessage = null;
     });
 
@@ -1088,7 +1105,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       setState(() {
         _applySnapshot(snapshot);
       });
-      unawaited(_syncExternalIp());
     } catch (error) {
       if (!mounted) {
         return;
@@ -1098,6 +1114,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (mounted) {
         setState(() {
           isBusy = false;
+          if (connection == ConnectionStateValue.disconnected) {
+            isConnecting = false;
+          }
         });
       }
     }
@@ -1200,51 +1219,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     profiles = List<ServerProfile>.from(config.profiles);
     activeProfileId = config.activeProfileId;
     runtimeStatus = snapshot.runtime;
-  }
-
-  Future<void> _syncExternalIp() async {
     if (connection != ConnectionStateValue.connected) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        externalIp = '';
-        isLoadingExternalIp = false;
-      });
-      return;
-    }
-
-    if (isLoadingExternalIp) {
-      return;
-    }
-
-    setState(() {
-      isLoadingExternalIp = true;
-    });
-
-    try {
-      final response = await http
-          .get(Uri.parse('https://api.ipify.org?format=json'))
-          .timeout(const Duration(seconds: 4));
-      if (response.statusCode < 400) {
-        final decoded = jsonDecode(response.body);
-        if (decoded is Map<String, dynamic>) {
-          final ip = (decoded['ip'] ?? '').toString();
-          if (mounted) {
-            setState(() {
-              externalIp = ip;
-            });
-          }
-        }
-      }
-    } catch (_) {
-      // Keep previous IP if lookup fails.
-    } finally {
-      if (mounted) {
-        setState(() {
-          isLoadingExternalIp = false;
-        });
-      }
+      isConnecting = false;
+    } else {
+      isConnecting = !runtimeStatus.ready;
     }
   }
 
@@ -1329,45 +1307,51 @@ class _DashboardScreenState extends State<DashboardScreen> {
         final maxContentWidth =
             constraints.maxWidth >= 1300 ? 980.0 : constraints.maxWidth;
         final horizontalPadding = constraints.maxWidth >= 900 ? 16.0 : 6.0;
-        return Align(
-          alignment: Alignment.topCenter,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: maxContentWidth),
-            child: ListView(
-              padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
-              children: [
-                _MainConnectionCard(
-                  profileName: hasActiveProfile
-                      ? activeProfile.name
-                      : 'Select VPN Server',
-                  connection: connection,
-                  canConnect: canConnect,
-                  isBusy: isBusy,
-                  onToggleConnection: _toggleConnection,
-                  profileItems: profiles,
-                  selectedProfileId: hasActiveProfile
-                      ? activeProfileId
-                      : (profiles.isNotEmpty ? profiles.first.id : null),
-                  onProfileChanged: (profileId) async {
-                    if (profileId == null) {
-                      return;
-                    }
-                    await _saveConfig(
-                        _currentConfig().copyWith(activeProfileId: profileId));
-                  },
-                  tunnelMode: tunnelMode,
-                  onTunnelModeChanged: _switchTunnelMode,
+        return Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(vertical: 18),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: maxContentWidth),
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _MainConnectionCard(
+                      profileName: hasActiveProfile
+                          ? activeProfile.name
+                          : 'Select VPN Server',
+                      connection: connection,
+                      isConnecting: isConnecting,
+                      canConnect: canConnect,
+                      isBusy: isBusy,
+                      onToggleConnection: _toggleConnection,
+                      profileItems: profiles,
+                      selectedProfileId: hasActiveProfile
+                          ? activeProfileId
+                          : (profiles.isNotEmpty ? profiles.first.id : null),
+                      onProfileChanged: (profileId) async {
+                        if (profileId == null) {
+                          return;
+                        }
+                        await _saveConfig(_currentConfig()
+                            .copyWith(activeProfileId: profileId));
+                      },
+                      tunnelMode: tunnelMode,
+                      onTunnelModeChanged: _switchTunnelMode,
+                    ),
+                    if (!canConnect) ...[
+                      const SizedBox(height: 16),
+                      _HintCard(
+                        title: 'No profile selected',
+                        description:
+                            'Open Profiles, import or create a profile, then select it on this screen.',
+                        icon: Icons.info_outline_rounded,
+                      ),
+                    ],
+                  ],
                 ),
-                if (!canConnect) ...[
-                  const SizedBox(height: 16),
-                  _HintCard(
-                    title: 'No profile selected',
-                    description:
-                        'Open Profiles, import or create a profile, then select it on this screen.',
-                    icon: Icons.info_outline_rounded,
-                  ),
-                ],
-              ],
+              ),
             ),
           ),
         );
@@ -2130,10 +2114,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
 class _Sidebar extends StatelessWidget {
   const _Sidebar({
     required this.connection,
+    required this.isConnecting,
     required this.routingMode,
     required this.dnsMode,
     required this.latencyMs,
     required this.externalIp,
+    required this.downloadBps,
+    required this.uploadBps,
     required this.hasActiveProfile,
     required this.activeProfileName,
     required this.selectedPage,
@@ -2141,10 +2128,13 @@ class _Sidebar extends StatelessWidget {
   });
 
   final ConnectionStateValue connection;
+  final bool isConnecting;
   final RoutingMode routingMode;
   final DnsMode dnsMode;
   final int latencyMs;
   final String externalIp;
+  final int downloadBps;
+  final int uploadBps;
   final bool hasActiveProfile;
   final String activeProfileName;
   final AppPage selectedPage;
@@ -2196,7 +2186,7 @@ class _Sidebar extends StatelessWidget {
                 child: const Icon(
                   Icons.toggle_on_rounded,
                   color: Colors.white,
-                  size: 34,
+                  size: 30,
                 ),
               ),
               const SizedBox(width: 14),
@@ -2204,7 +2194,7 @@ class _Sidebar extends StatelessWidget {
                 child: Text(
                   'Troodi VPN',
                   style: TextStyle(
-                    fontSize: 20,
+                    fontSize: 18,
                     fontWeight: FontWeight.w700,
                     color: AppPalette.homeText,
                   ),
@@ -2227,27 +2217,42 @@ class _Sidebar extends StatelessWidget {
                 Row(
                   children: [
                     Icon(
-                      connection == ConnectionStateValue.connected
-                          ? Icons.check_circle_rounded
-                          : Icons.pause_circle_filled_rounded,
+                      isConnecting
+                          ? Icons.sync_rounded
+                          : connection == ConnectionStateValue.connected
+                              ? Icons.check_circle_rounded
+                              : Icons.pause_circle_filled_rounded,
                       size: 22,
-                      color: connection == ConnectionStateValue.connected
-                          ? const Color(0xFF2F8C60)
-                          : const Color(0xFF9A6A22),
+                      color: isConnecting
+                          ? const Color(0xFF5573E6)
+                          : connection == ConnectionStateValue.connected
+                              ? const Color(0xFF2F8C60)
+                              : const Color(0xFF9A6A22),
                     ),
                     const SizedBox(width: 10),
                     Text(
-                      connection == ConnectionStateValue.connected
-                          ? 'Connected'
-                          : 'Disconnected',
+                      isConnecting
+                          ? 'Connecting'
+                          : connection == ConnectionStateValue.connected
+                              ? 'Connected'
+                              : 'Disconnected',
                       style: const TextStyle(
-                        fontSize: 18,
+                        fontSize: 17,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 14),
+                Text(
+                  'Connection info',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.black.withValues(alpha: 0.54),
+                  ),
+                ),
+                const SizedBox(height: 10),
                 _StatusRow(
                   label: 'Ping',
                   value: latencyMs > 0 ? '$latencyMs ms' : 'n/a',
@@ -2258,6 +2263,41 @@ class _Sidebar extends StatelessWidget {
                   label: 'IP',
                   value: externalIp.isEmpty ? 'n/a' : externalIp,
                   dark: false,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Network activity',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: AppPalette.homeText.withValues(alpha: 0.92),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _SidebarTrafficRow(
+                  icon: Icons.arrow_upward_rounded,
+                  iconColor: const Color(0xFF6CEB86),
+                  value: _formatRate(uploadBps),
+                ),
+                const SizedBox(height: 8),
+                _SidebarTrafficRow(
+                  icon: Icons.arrow_downward_rounded,
+                  iconColor: const Color(0xFFFF9E8B),
+                  value: _formatRate(downloadBps),
                 ),
               ],
             ),
@@ -2303,7 +2343,7 @@ class _Sidebar extends StatelessWidget {
                             ? activeProfileName
                             : 'No profile selected',
                         style: const TextStyle(
-                          fontSize: 16,
+                          fontSize: 15,
                           fontWeight: FontWeight.w700,
                           color: AppPalette.homeText,
                         ),
@@ -2318,7 +2358,7 @@ class _Sidebar extends StatelessWidget {
                       : 'Open Profiles, import or create a profile, then select it on this screen.',
                   style: TextStyle(
                     height: 1.45,
-                    fontSize: 14,
+                    fontSize: 13,
                     color: AppPalette.homeTextMuted.withValues(alpha: 0.9),
                   ),
                 ),
@@ -2754,6 +2794,7 @@ class _MainConnectionCard extends StatelessWidget {
   const _MainConnectionCard({
     required this.profileName,
     required this.connection,
+    required this.isConnecting,
     required this.canConnect,
     required this.isBusy,
     required this.onToggleConnection,
@@ -2766,6 +2807,7 @@ class _MainConnectionCard extends StatelessWidget {
 
   final String profileName;
   final ConnectionStateValue connection;
+  final bool isConnecting;
   final bool canConnect;
   final bool isBusy;
   final Future<void> Function() onToggleConnection;
@@ -2778,105 +2820,41 @@ class _MainConnectionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final connected = connection == ConnectionStateValue.connected;
-    final statusLabel = connected ? 'CONNECTED' : 'DISCONNECTED';
-    final statusColor =
-        connected ? AppPalette.homeAccent : const Color(0xFF8D95B2);
+    final statusLabel = isConnecting
+        ? 'CONNECTING'
+        : connected
+            ? 'CONNECTED'
+            : 'DISCONNECTED';
+    final statusColor = isConnecting
+        ? const Color(0xFF8FA4FF)
+        : connected
+            ? AppPalette.homeAccent
+            : const Color(0xFF8D95B2);
     final isCompact = MediaQuery.of(context).size.width < 760;
-
-    final topCardWidth = isCompact ? double.infinity : 820.0;
     final bottomCardWidth = isCompact ? double.infinity : 630.0;
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(8, 8, 8, 18),
+      padding: const EdgeInsets.fromLTRB(8, 10, 8, 10),
       child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const SizedBox(height: 18),
-          Center(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: topCardWidth),
-              child: Container(
-                padding: const EdgeInsets.fromLTRB(28, 20, 28, 18),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Colors.white.withValues(alpha: 0.15),
-                      Colors.white.withValues(alpha: 0.08),
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(32),
-                  border:
-                      Border.all(color: Colors.white.withValues(alpha: 0.12)),
-                  boxShadow: [AppShadows.darkCard],
-                ),
-                child: Column(
-                  children: [
-                    Text(
-                      'Network Activity',
-                      style: TextStyle(
-                        color: AppPalette.homeText.withValues(alpha: 0.76),
-                        fontSize: isCompact ? 18 : 21,
-                        fontWeight: FontWeight.w400,
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    Divider(
-                      height: 1,
-                      color: Colors.white.withValues(alpha: 0.11),
-                    ),
-                    const SizedBox(height: 18),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _TrafficStat(
-                            label: 'Download',
-                            value: '0 B/s',
-                            icon: Icons.arrow_downward_rounded,
-                            iconColor: const Color(0xFF71C6FF),
-                          ),
-                        ),
-                        Container(
-                          width: 1,
-                          height: 76,
-                          color: Colors.white.withValues(alpha: 0.1),
-                        ),
-                        Expanded(
-                          child: _TrafficStat(
-                            label: 'Upload',
-                            value: '0 B/s',
-                            icon: Icons.arrow_upward_rounded,
-                            iconColor: const Color(0xFFA9A8FF),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          )
-              .animate(delay: 90.ms)
-              .fadeIn(duration: 360.ms)
-              .scale(begin: const Offset(0.96, 0.96), end: const Offset(1, 1)),
-          SizedBox(height: isCompact ? 30 : 36),
           Center(
             child: Text(
               statusLabel,
               style: TextStyle(
-                letterSpacing: isCompact ? 2.6 : 3.6,
+                letterSpacing: isCompact ? 2.1 : 3.0,
                 fontWeight: FontWeight.w300,
-                fontSize: isCompact ? 28 : 40,
+                fontSize: isCompact ? 24 : 34,
                 color: AppPalette.homeTextMuted.withValues(alpha: 0.88),
               ),
             ),
-          ).animate(delay: 150.ms).fadeIn(duration: 240.ms),
+          ).animate(delay: 120.ms).fadeIn(duration: 240.ms),
           SizedBox(height: isCompact ? 14 : 18),
           Center(
             child: Container(
-              width: isCompact ? 152 : 164,
-              height: isCompact ? 152 : 164,
+              width: isCompact ? 144 : 156,
+              height: isCompact ? 144 : 156,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: RadialGradient(
@@ -2890,18 +2868,18 @@ class _MainConnectionCard extends StatelessWidget {
                   AppShadows.glow(statusColor),
                 ],
               ),
-              child: Center(
-                child: MouseRegion(
-                  cursor: canConnect && !isBusy
+              child: MouseRegion(
+                cursor: canConnect && !isBusy
+                    ? SystemMouseCursors.click
+                    : SystemMouseCursors.basic,
+                child: IconButton(
+                  onPressed: canConnect && !isBusy ? onToggleConnection : null,
+                  iconSize: isCompact ? 46 : 52,
+                  mouseCursor: canConnect && !isBusy
                       ? SystemMouseCursors.click
                       : SystemMouseCursors.basic,
-                  child: IconButton(
-                    onPressed:
-                        canConnect && !isBusy ? onToggleConnection : null,
-                    iconSize: isCompact ? 50 : 56,
-                    style: AppUi.powerButton(statusColor),
-                    icon: const Icon(Icons.power_settings_new_rounded),
-                  ),
+                  style: AppUi.powerButton(statusColor),
+                  icon: const Icon(Icons.power_settings_new_rounded),
                 ),
               ),
             ),
@@ -2909,7 +2887,7 @@ class _MainConnectionCard extends StatelessWidget {
               .animate(delay: 160.ms)
               .fadeIn(duration: 280.ms)
               .scale(begin: const Offset(0.92, 0.92), end: const Offset(1, 1)),
-          SizedBox(height: isCompact ? 28 : 34),
+          SizedBox(height: isCompact ? 24 : 28),
           Center(
             child: ConstrainedBox(
               constraints: BoxConstraints(maxWidth: bottomCardWidth),
@@ -2925,7 +2903,7 @@ class _MainConnectionCard extends StatelessWidget {
               .animate(delay: 340.ms)
               .fadeIn(duration: 300.ms)
               .slideY(begin: 0.04, end: 0, curve: Curves.easeOutCubic),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
           Center(
             child: ConstrainedBox(
               constraints: BoxConstraints(maxWidth: bottomCardWidth),
@@ -2945,7 +2923,7 @@ class _MainConnectionCard extends StatelessWidget {
                     : 'Proxy: for selected apps only.',
                 style: TextStyle(
                   color: AppPalette.homeTextMuted.withValues(alpha: 0.82),
-                  fontSize: 14,
+                  fontSize: 13,
                 ),
               ),
             ),
@@ -3192,7 +3170,7 @@ class _ServerSelectCard extends StatelessWidget {
                     selectedName,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 17,
+                      fontSize: 15,
                       fontWeight: FontWeight.w600,
                       color: disabled
                           ? AppPalette.homeTextMuted.withValues(alpha: 0.68)
@@ -3255,7 +3233,7 @@ class _TunnelModeToggle extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Container(
-          height: 62,
+          height: 56,
           decoration: BoxDecoration(
             gradient: const LinearGradient(
               begin: Alignment.topLeft,
@@ -3286,7 +3264,7 @@ class _TunnelModeToggle extends StatelessWidget {
                   isVpn ? 'VPN' : 'Proxy',
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 22,
+                    fontSize: 18,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -3296,7 +3274,7 @@ class _TunnelModeToggle extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         Container(
-          height: 58,
+          height: 52,
           decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topLeft,
@@ -3384,7 +3362,7 @@ class _ModeSegment extends StatelessWidget {
               Text(
                 label,
                 style: TextStyle(
-                  fontSize: 16,
+                  fontSize: 14,
                   fontWeight: FontWeight.w500,
                   color: selected
                       ? AppPalette.homeText.withValues(alpha: 0.9)
@@ -3504,6 +3482,60 @@ class _TrafficStat extends StatelessWidget {
       ),
     );
   }
+}
+
+class _SidebarTrafficRow extends StatelessWidget {
+  const _SidebarTrafficRow({
+    required this.icon,
+    required this.iconColor,
+    required this.value,
+  });
+
+  final IconData icon;
+  final Color iconColor;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: iconColor),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            value,
+            textAlign: TextAlign.right,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: AppPalette.homeText.withValues(alpha: 0.92),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+String _formatRate(int bytesPerSecond) {
+  if (bytesPerSecond <= 0) {
+    return '0 B/s';
+  }
+
+  const units = ['B/s', 'KiB/s', 'MiB/s', 'GiB/s'];
+  var value = bytesPerSecond.toDouble();
+  var unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex++;
+  }
+
+  final digits = value >= 100
+      ? 0
+      : value >= 10
+          ? 1
+          : 2;
+  return '${value.toStringAsFixed(digits)} ${units[unitIndex]}';
 }
 
 class _HintCard extends StatelessWidget {
@@ -3890,7 +3922,7 @@ class _NavButton extends StatelessWidget {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
           curve: Curves.easeOut,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           decoration: BoxDecoration(
             gradient: selected
                 ? LinearGradient(
@@ -3914,12 +3946,12 @@ class _NavButton extends StatelessWidget {
             children: [
               Icon(
                 icon,
-                size: 26,
+                size: 22,
                 color: selected
                     ? AppPalette.homeText
                     : AppPalette.homeTextMuted.withValues(alpha: 0.95),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 14),
               Expanded(
                 child: Text(
                   label,
@@ -3928,7 +3960,7 @@ class _NavButton extends StatelessWidget {
                         ? AppPalette.homeText
                         : AppPalette.homeTextMuted.withValues(alpha: 0.95),
                     fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                    fontSize: 17,
+                    fontSize: 15,
                   ),
                 ),
               ),

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,43 +17,62 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unsafe"
 
 	"github.com/miekg/dns"
 	"github.com/troodi/xray-desktop/core-manager/internal/config"
 	"github.com/troodi/xray-desktop/core-manager/internal/platform"
 	"github.com/troodi/xray-desktop/core-manager/internal/xray"
 	"golang.org/x/net/proxy"
+	"golang.org/x/sys/windows"
 )
 
 const maxLogLines = 200
 
+var (
+	kernel32ProcessIO        = windows.NewLazySystemDLL("kernel32.dll")
+	procGetProcessIoCounters = kernel32ProcessIO.NewProc("GetProcessIoCounters")
+)
+
 type Status struct {
-	Running    bool     `json:"running"`
-	PID        int      `json:"pid"`
-	BinaryPath string   `json:"binaryPath"`
-	ConfigPath string   `json:"configPath"`
-	LastError  string   `json:"lastError,omitempty"`
-	LastExit   string   `json:"lastExit,omitempty"`
-	Mode       string   `json:"mode"`
-	LatencyMS  int      `json:"latencyMs"`
-	Elevated   bool     `json:"elevated"`
-	Logs       []string `json:"logs"`
+	Running     bool     `json:"running"`
+	PID         int      `json:"pid"`
+	BinaryPath  string   `json:"binaryPath"`
+	ConfigPath  string   `json:"configPath"`
+	LastError   string   `json:"lastError,omitempty"`
+	LastExit    string   `json:"lastExit,omitempty"`
+	Mode        string   `json:"mode"`
+	LatencyMS   int      `json:"latencyMs"`
+	PublicIP    string   `json:"publicIp"`
+	DownloadBps uint64   `json:"downloadBps"`
+	UploadBps   uint64   `json:"uploadBps"`
+	Ready       bool     `json:"ready"`
+	Elevated    bool     `json:"elevated"`
+	Logs        []string `json:"logs"`
 }
 
 type Manager struct {
-	mu         sync.Mutex
-	cmd        *exec.Cmd
-	running    bool
-	binaryPath string
-	configPath string
-	logs       []string
-	lastError  string
-	lastExit   string
-	mode       string
-	latencyMS  int
-	pingCancel context.CancelFunc
-	proxyState *platform.ProxySettings
-	tunState   *platform.TUNState
+	mu             sync.Mutex
+	cmd            *exec.Cmd
+	running        bool
+	binaryPath     string
+	configPath     string
+	logs           []string
+	lastError      string
+	lastExit       string
+	mode           string
+	latencyMS      int
+	publicIP       string
+	downloadBps    uint64
+	uploadBps      uint64
+	ready          bool
+	metricsCancel  context.CancelFunc
+	lastReadBytes  uint64
+	lastWriteBytes uint64
+	lastMetricsAt  time.Time
+	lastIPLookupAt time.Time
+	proxyState     *platform.ProxySettings
+	tunState       *platform.TUNState
 }
 
 func NewManager(binaryPath string) *Manager {
@@ -142,15 +162,19 @@ func (m *Manager) Status() Status {
 	defer m.mu.Unlock()
 
 	status := Status{
-		Running:    m.running,
-		BinaryPath: m.binaryPath,
-		ConfigPath: m.configPath,
-		LastError:  m.lastError,
-		LastExit:   m.lastExit,
-		Mode:       m.mode,
-		LatencyMS:  m.latencyMS,
-		Elevated:   platform.IsElevated(),
-		Logs:       append([]string(nil), m.logs...),
+		Running:     m.running,
+		BinaryPath:  m.binaryPath,
+		ConfigPath:  m.configPath,
+		LastError:   m.lastError,
+		LastExit:    m.lastExit,
+		Mode:        m.mode,
+		LatencyMS:   m.latencyMS,
+		PublicIP:    m.publicIP,
+		DownloadBps: m.downloadBps,
+		UploadBps:   m.uploadBps,
+		Ready:       m.ready,
+		Elevated:    platform.IsElevated(),
+		Logs:        append([]string(nil), m.logs...),
 	}
 
 	if m.running && m.cmd != nil && m.cmd.Process != nil {
@@ -224,6 +248,14 @@ func (m *Manager) startLocked(cfg config.AppConfig) error {
 	m.lastError = ""
 	m.lastExit = ""
 	m.mode = "proxy"
+	m.publicIP = ""
+	m.downloadBps = 0
+	m.uploadBps = 0
+	m.ready = false
+	m.lastReadBytes = 0
+	m.lastWriteBytes = 0
+	m.lastMetricsAt = time.Time{}
+	m.lastIPLookupAt = time.Time{}
 	if cfg.TUNEnabled {
 		m.mode = "tun"
 	}
@@ -247,7 +279,7 @@ func (m *Manager) startLocked(cfg config.AppConfig) error {
 			m.appendLogLocked(fmt.Sprintf("[%s] TUN adapter %s configured in safe test mode (routes unchanged)", time.Now().Format(time.RFC3339), tunState.InterfaceAlias))
 		}
 	}
-	m.startPingLoopLocked(cfg)
+	m.startMetricsLoopLocked(cfg)
 
 	go m.captureLogs(stdout)
 	go m.captureLogs(stderr)
@@ -280,7 +312,7 @@ func (m *Manager) stopLocked() error {
 
 	m.running = false
 	m.cmd = nil
-	m.stopPingLoopLocked()
+	m.stopMetricsLoopLocked()
 	if err := platform.CleanupTUN(m.tunState); err == nil {
 		m.tunState = nil
 	}
@@ -289,6 +321,10 @@ func (m *Manager) stopLocked() error {
 	}
 	m.lastExit = "xray stopped"
 	m.latencyMS = 0
+	m.publicIP = ""
+	m.downloadBps = 0
+	m.uploadBps = 0
+	m.ready = false
 
 	return nil
 }
@@ -375,7 +411,7 @@ func (m *Manager) waitForExit(cmd *exec.Cmd) {
 		m.appendLogLocked(m.lastExit)
 	}
 
-	m.stopPingLoopLocked()
+	m.stopMetricsLoopLocked()
 	if cleanupErr := platform.CleanupTUN(m.tunState); cleanupErr == nil {
 		m.tunState = nil
 	}
@@ -383,6 +419,10 @@ func (m *Manager) waitForExit(cmd *exec.Cmd) {
 		m.proxyState = nil
 	}
 	m.latencyMS = 0
+	m.publicIP = ""
+	m.downloadBps = 0
+	m.uploadBps = 0
+	m.ready = false
 	m.running = false
 	m.cmd = nil
 }
@@ -520,77 +560,209 @@ func (m *Manager) applySystemProxyLocked(cfg config.AppConfig) error {
 	return nil
 }
 
-func (m *Manager) startPingLoopLocked(cfg config.AppConfig) {
-	m.stopPingLoopLocked()
+func (m *Manager) startMetricsLoopLocked(cfg config.AppConfig) {
+	m.stopMetricsLoopLocked()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	m.pingCancel = cancel
+	m.metricsCancel = cancel
 
 	go func() {
 		ticker := time.NewTicker(1 * time.Second)
 		defer ticker.Stop()
 
-		m.measurePing(cfg)
+		m.refreshRuntimeMetrics(cfg)
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				m.measurePing(cfg)
+				m.refreshRuntimeMetrics(cfg)
 			}
 		}
 	}()
 }
 
-func (m *Manager) stopPingLoopLocked() {
-	if m.pingCancel != nil {
-		m.pingCancel()
-		m.pingCancel = nil
+func (m *Manager) stopMetricsLoopLocked() {
+	if m.metricsCancel != nil {
+		m.metricsCancel()
+		m.metricsCancel = nil
 	}
 }
 
-func (m *Manager) measurePing(cfg config.AppConfig) {
-	startedAt := time.Now()
+func (m *Manager) refreshRuntimeMetrics(cfg config.AppConfig) {
+	latency := measureLatency(cfg)
+	publicIP := ""
 
-	var (
-		conn net.Conn
-		err  error
-	)
+	m.mu.Lock()
+	shouldRefreshIP := m.publicIP == "" || time.Since(m.lastIPLookupAt) >= 10*time.Second
+	currentIP := m.publicIP
+	m.mu.Unlock()
 
-	if cfg.TUNEnabled {
-		conn, err = net.DialTimeout("tcp", "8.8.8.8:53", 2*time.Second)
+	if shouldRefreshIP {
+		if ip, err := lookupExternalIP(cfg); err == nil {
+			publicIP = ip
+		}
 	} else {
-		var dialer proxy.Dialer
-		dialer, err = proxy.SOCKS5(
-			"tcp",
-			"127.0.0.1:10808",
-			nil,
-			&net.Dialer{Timeout: 2 * time.Second},
-		)
-		if err == nil {
-			conn, err = dialer.Dial("tcp", "8.8.8.8:53")
-		}
+		publicIP = currentIP
 	}
 
-	latency := 0
-	if err == nil {
-		err = queryGoogleDNS(conn)
-		if err == nil {
-			latency = int(time.Since(startedAt).Milliseconds())
-			if latency == 0 {
-				latency = 1
-			}
-		}
-		_ = conn.Close()
-	}
+	downloadBps, uploadBps := m.measureProcessIO()
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if err != nil {
-		m.latencyMS = 0
-		return
-	}
 	m.latencyMS = latency
+	if publicIP != "" {
+		m.publicIP = publicIP
+		m.lastIPLookupAt = time.Now()
+	}
+	m.downloadBps = downloadBps
+	m.uploadBps = uploadBps
+	m.ready = m.running && (m.latencyMS > 0 || m.publicIP != "")
+}
+
+func measureLatency(cfg config.AppConfig) int {
+	startedAt := time.Now()
+	conn, err := dialDiagnosticTarget(cfg, "8.8.8.8:53")
+	if err != nil {
+		return 0
+	}
+	defer conn.Close()
+
+	if err := queryGoogleDNS(conn); err != nil {
+		return 0
+	}
+
+	latency := int(time.Since(startedAt).Milliseconds())
+	if latency == 0 {
+		return 1
+	}
+	return latency
+}
+
+func dialDiagnosticTarget(cfg config.AppConfig, address string) (net.Conn, error) {
+	if cfg.TUNEnabled {
+		return net.DialTimeout("tcp", address, 2*time.Second)
+	}
+
+	dialer, err := proxy.SOCKS5(
+		"tcp",
+		"127.0.0.1:10808",
+		nil,
+		&net.Dialer{Timeout: 2 * time.Second},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return dialer.Dial("tcp", address)
+}
+
+func lookupExternalIP(cfg config.AppConfig) (string, error) {
+	request, err := http.NewRequest(http.MethodGet, "https://api.ipify.org?format=json", nil)
+	if err != nil {
+		return "", err
+	}
+
+	client := &http.Client{Timeout: 4 * time.Second}
+	if !cfg.TUNEnabled {
+		dialer, err := proxy.SOCKS5(
+			"tcp",
+			"127.0.0.1:10808",
+			nil,
+			&net.Dialer{Timeout: 3 * time.Second},
+		)
+		if err != nil {
+			return "", err
+		}
+		client.Transport = &http.Transport{
+			DialContext: func(_ context.Context, network, addr string) (net.Conn, error) {
+				return dialer.Dial(network, addr)
+			},
+		}
+	}
+
+	response, err := client.Do(request)
+	if err != nil {
+		return "", err
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode >= http.StatusBadRequest {
+		return "", fmt.Errorf("ip lookup failed: %s", response.Status)
+	}
+
+	var payload struct {
+		IP string `json:"ip"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(payload.IP), nil
+}
+
+func (m *Manager) measureProcessIO() (uint64, uint64) {
+	m.mu.Lock()
+	cmd := m.cmd
+	lastReadBytes := m.lastReadBytes
+	lastWriteBytes := m.lastWriteBytes
+	lastMetricsAt := m.lastMetricsAt
+	m.mu.Unlock()
+
+	if cmd == nil || cmd.Process == nil || runtime.GOOS != "windows" {
+		return 0, 0
+	}
+
+	handle, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(cmd.Process.Pid))
+	if err != nil {
+		return 0, 0
+	}
+	defer windows.CloseHandle(handle)
+
+	var counters windows.IO_COUNTERS
+	if err := getProcessIoCounters(handle, &counters); err != nil {
+		return 0, 0
+	}
+
+	now := time.Now()
+	if lastMetricsAt.IsZero() {
+		m.mu.Lock()
+		m.lastReadBytes = counters.ReadTransferCount
+		m.lastWriteBytes = counters.WriteTransferCount
+		m.lastMetricsAt = now
+		m.mu.Unlock()
+		return 0, 0
+	}
+
+	elapsed := now.Sub(lastMetricsAt)
+	if elapsed <= 0 {
+		return 0, 0
+	}
+
+	seconds := elapsed.Seconds()
+	downloadBps := uint64(float64(counters.ReadTransferCount-lastReadBytes) / seconds)
+	uploadBps := uint64(float64(counters.WriteTransferCount-lastWriteBytes) / seconds)
+
+	m.mu.Lock()
+	m.lastReadBytes = counters.ReadTransferCount
+	m.lastWriteBytes = counters.WriteTransferCount
+	m.lastMetricsAt = now
+	m.mu.Unlock()
+
+	return downloadBps, uploadBps
+}
+
+func getProcessIoCounters(handle windows.Handle, counters *windows.IO_COUNTERS) error {
+	r1, _, e1 := procGetProcessIoCounters.Call(
+		uintptr(handle),
+		uintptr(unsafe.Pointer(counters)),
+	)
+	if r1 != 0 {
+		return nil
+	}
+	if e1 != windows.ERROR_SUCCESS && e1 != nil {
+		return e1
+	}
+	return errors.New("GetProcessIoCounters failed")
 }
 
 func queryGoogleDNS(conn net.Conn) error {

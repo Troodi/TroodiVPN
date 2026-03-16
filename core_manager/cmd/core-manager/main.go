@@ -12,6 +12,16 @@ import (
 
 func main() {
 	store := config.NewMemoryStore(config.DefaultAppConfig())
+	if configPath, err := config.DefaultConfigPath(); err == nil {
+		if fileStore, err := config.NewFileStore(config.DefaultAppConfig(), configPath); err == nil {
+			store = fileStore
+			log.Printf("config persistence enabled: %s", configPath)
+		} else {
+			log.Printf("config persistence disabled (%v), using in-memory store", err)
+		}
+	} else {
+		log.Printf("config path not resolved (%v), using in-memory store", err)
+	}
 	runtime := xruntime.NewManager(xruntime.DefaultBinaryPath())
 	handler := api.NewServer(store, runtime)
 

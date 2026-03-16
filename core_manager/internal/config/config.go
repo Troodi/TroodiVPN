@@ -1,6 +1,12 @@
 package config
 
-import "sync"
+import (
+	"encoding/json"
+	"errors"
+	"os"
+	"path/filepath"
+	"sync"
+)
 
 type ConnectionState string
 
@@ -73,91 +79,170 @@ type AppConfig struct {
 
 func DefaultAppConfig() AppConfig {
 	return AppConfig{
-		ActiveProfileID:    "main-reality",
-		ConnectionState:    ConnectionConnected,
-		RoutingMode:        RoutingBlacklist,
+		ActiveProfileID:    "",
+		ConnectionState:    ConnectionDisconnected,
+		RoutingMode:        RoutingGlobal,
 		DNSMode:            DNSAuto,
-		SystemProxyEnabled: true,
-		TUNEnabled:         false,
-		LaunchAtStartup:    true,
-		ProxyDomains:       []string{"openai.com", "chatgpt.com", "github.com"},
-		DirectDomains:      []string{"bank.ru", "gosuslugi.ru", "youtube.com"},
-		BlockedDomains:     []string{"doubleclick.net", "ads.example.com"},
-		Profiles: []ServerProfile{
-			{
-				ID:               "main-reality",
-				Name:             "Main Reality",
-				LatencyMS:        48,
-				Health:           ProfileHealthy,
-				Protocol:         "vless",
-				Address:          "main.example.com",
-				Port:             443,
-				SNI:              "main.example.com",
-				Security:         "reality",
-				Transport:        "tcp",
-				Fingerprint:      "chrome",
-				RealityPublicKey: "example-public-key",
-				RealityShortID:   "6ba85179e30d4fc2",
-				SpiderX:          "/",
-			},
-			{
-				ID:          "backup-nl",
-				Name:        "Backup Netherlands",
-				LatencyMS:   63,
-				Health:      ProfileHealthy,
-				Protocol:    "trojan",
-				Address:     "nl.example.com",
-				Port:        443,
-				SNI:         "cdn.example.com",
-				Security:    "tls",
-				Transport:   "ws",
-				Host:        "cdn.example.com",
-				Path:        "/ws",
-				Fingerprint: "chrome",
-			},
-			{
-				ID:          "usa-streaming",
-				Name:        "USA Streaming",
-				LatencyMS:   124,
-				Health:      ProfileTesting,
-				Protocol:    "vmess",
-				Address:     "us.example.com",
-				Port:        443,
-				SNI:         "video.example.com",
-				Security:    "tls",
-				Transport:   "grpc",
-				Host:        "video.example.com",
-				Path:        "streaming",
-				Fingerprint: "chrome",
-				ALPN:        "h2,http/1.1",
-			},
-		},
+		SystemProxyEnabled: false,
+		TUNEnabled:         true,
+		LaunchAtStartup:    false,
+		ProxyDomains:       []string{},
+		DirectDomains:      []string{},
+		BlockedDomains:     []string{},
+		Profiles:           []ServerProfile{},
 	}
 }
 
 type Store struct {
 	mu     sync.RWMutex
 	config AppConfig
+	path   string
 }
 
 func NewMemoryStore(initial AppConfig) *Store {
-	return &Store{config: initial}
+	return &Store{config: normalizeConfig(initial)}
+}
+
+func NewFileStore(initial AppConfig, path string) (*Store, error) {
+	store := &Store{
+		config: normalizeConfig(initial),
+		path:   path,
+	}
+
+	if path == "" {
+		return store, nil
+	}
+
+	loaded, err := loadFromFile(path)
+	if err == nil {
+		store.config = normalizeConfig(loaded)
+		return store, nil
+	}
+
+	if !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+
+	if err := store.saveLocked(); err != nil {
+		return nil, err
+	}
+
+	return store, nil
+}
+
+func DefaultConfigPath() (string, error) {
+	dir, err := os.UserConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "troodi-vpn", "config.json"), nil
 }
 
 func (s *Store) Get() AppConfig {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	cfg := s.config
-	cfg.ProxyDomains = append([]string(nil), s.config.ProxyDomains...)
-	cfg.DirectDomains = append([]string(nil), s.config.DirectDomains...)
-	cfg.BlockedDomains = append([]string(nil), s.config.BlockedDomains...)
-	cfg.Profiles = append([]ServerProfile(nil), s.config.Profiles...)
-	return cfg
+	return cloneConfig(s.config)
 }
 
 func (s *Store) Put(next AppConfig) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.config = next
+	s.config = normalizeConfig(next)
+	_ = s.saveLocked()
+}
+
+func (s *Store) saveLocked() error {
+	if s.path == "" {
+		return nil
+	}
+
+	data, err := json.MarshalIndent(s.config, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
+		return err
+	}
+
+	return os.WriteFile(s.path, data, 0o644)
+}
+
+func loadFromFile(path string) (AppConfig, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return AppConfig{}, err
+	}
+
+	var cfg AppConfig
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return AppConfig{}, err
+	}
+
+	return cfg, nil
+}
+
+func cloneConfig(cfg AppConfig) AppConfig {
+	cloned := cfg
+	cloned.ProxyDomains = append([]string(nil), cfg.ProxyDomains...)
+	cloned.DirectDomains = append([]string(nil), cfg.DirectDomains...)
+	cloned.BlockedDomains = append([]string(nil), cfg.BlockedDomains...)
+	cloned.Profiles = append([]ServerProfile(nil), cfg.Profiles...)
+	return cloned
+}
+
+func normalizeConfig(cfg AppConfig) AppConfig {
+	cfg.ProxyDomains = append([]string(nil), cfg.ProxyDomains...)
+	cfg.DirectDomains = append([]string(nil), cfg.DirectDomains...)
+	cfg.BlockedDomains = append([]string(nil), cfg.BlockedDomains...)
+	cfg.Profiles = append([]ServerProfile(nil), cfg.Profiles...)
+	if cfg.ProxyDomains == nil {
+		cfg.ProxyDomains = []string{}
+	}
+	if cfg.DirectDomains == nil {
+		cfg.DirectDomains = []string{}
+	}
+	if cfg.BlockedDomains == nil {
+		cfg.BlockedDomains = []string{}
+	}
+	if cfg.Profiles == nil {
+		cfg.Profiles = []ServerProfile{}
+	}
+
+	if cfg.RoutingMode != RoutingGlobal &&
+		cfg.RoutingMode != RoutingWhitelist &&
+		cfg.RoutingMode != RoutingBlacklist {
+		cfg.RoutingMode = RoutingGlobal
+	}
+
+	if cfg.DNSMode != DNSAuto &&
+		cfg.DNSMode != DNSProxy &&
+		cfg.DNSMode != DNSDirect {
+		cfg.DNSMode = DNSAuto
+	}
+
+	hasActive := false
+	for _, profile := range cfg.Profiles {
+		if profile.ID == cfg.ActiveProfileID {
+			hasActive = true
+			break
+		}
+	}
+
+	if !hasActive {
+		if len(cfg.Profiles) > 0 {
+			cfg.ActiveProfileID = cfg.Profiles[0].ID
+		} else {
+			cfg.ActiveProfileID = ""
+			cfg.ConnectionState = ConnectionDisconnected
+		}
+	}
+
+	if cfg.ConnectionState != ConnectionConnected &&
+		cfg.ConnectionState != ConnectionDisconnected {
+		cfg.ConnectionState = ConnectionDisconnected
+	}
+
+	return cfg
 }

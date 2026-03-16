@@ -90,9 +90,28 @@ install(CODE "
 
 set(INSTALL_BUNDLE_DATA_DIR "${CMAKE_INSTALL_PREFIX}/data")
 set(INSTALL_BUNDLE_LIB_DIR "${CMAKE_INSTALL_PREFIX}/lib")
+set(PROJECT_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../..")
 
 install(TARGETS ${BINARY_NAME} RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}"
   COMPONENT Runtime)
+
+set(CORE_MANAGER_DIST "${PROJECT_ROOT_DIR}/dist/linux/core-manager")
+set(CORE_MANAGER_BIN "${PROJECT_ROOT_DIR}/core_manager/bin/core-manager")
+set(XRAY_BIN "${PROJECT_ROOT_DIR}/xray_runtime/bin/linux/xray")
+
+if(EXISTS "${CORE_MANAGER_DIST}")
+  install(PROGRAMS "${CORE_MANAGER_DIST}" DESTINATION "${CMAKE_INSTALL_PREFIX}" COMPONENT Runtime)
+elseif(EXISTS "${CORE_MANAGER_BIN}")
+  install(PROGRAMS "${CORE_MANAGER_BIN}" DESTINATION "${CMAKE_INSTALL_PREFIX}" COMPONENT Runtime)
+else()
+  message(WARNING "core-manager binary not found. Build core_manager first.")
+endif()
+
+if(EXISTS "${XRAY_BIN}")
+  install(PROGRAMS "${XRAY_BIN}" DESTINATION "${CMAKE_INSTALL_PREFIX}" COMPONENT Runtime)
+else()
+  message(WARNING "xray binary not found at xray_runtime/bin/linux/xray. Build xray first.")
+endif()
 
 install(FILES "${FLUTTER_ICU_DATA_FILE}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
   COMPONENT Runtime)

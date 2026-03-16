@@ -21,6 +21,8 @@ type TUNOptions struct {
 	MTU            int
 	DNSServers     []string
 	ManageRoutes   bool
+	DefaultRoute   *DefaultRoute
+	BypassCIDRs    []string
 }
 
 type TUNState struct {
@@ -30,6 +32,7 @@ type TUNState struct {
 	PrefixLength   int
 	DNSServers     []string
 	RoutePrefixes  []string
+	BypassCIDRs    []string
 }
 
 func IsElevated() bool {
@@ -83,6 +86,7 @@ func PrepareTUN(opts TUNOptions) (*TUNState, error) {
 		PrefixLength:   opts.PrefixLength,
 		DNSServers:     append([]string(nil), opts.DNSServers...),
 		RoutePrefixes:  []string{"0.0.0.0/1", "128.0.0.0/1"},
+		BypassCIDRs:    append([]string(nil), opts.BypassCIDRs...),
 	}, nil
 }
 

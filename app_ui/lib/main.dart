@@ -348,7 +348,7 @@ class BackendRuntime {
       final executable = await _findBackendExecutable();
       if (executable == null) {
         throw Exception(
-          'core-manager.exe not found. Build it first or place it next to the app.',
+          'core-manager not found. Build it first or place it next to the app.',
         );
       }
 
@@ -406,6 +406,8 @@ class BackendRuntime {
     final candidates = <String>[
       for (final appDir in appDirs) _joinPath(appDir, executableName),
       for (final appDir in appDirs) _joinPath(appDir, 'data', executableName),
+      _joinPath(Directory.current.path, '..', 'dist', 'linux', executableName),
+      _joinPath(Directory.current.path, 'dist', 'linux', executableName),
       _joinPath(
           Directory.current.path, '..', 'core_manager', 'bin', executableName),
       _joinPath(Directory.current.path, 'core_manager', 'bin', executableName),

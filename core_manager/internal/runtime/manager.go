@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 	"unsafe"
 
@@ -227,6 +228,7 @@ func (m *Manager) startLocked(cfg config.AppConfig) error {
 
 	cmd := exec.Command(m.binaryPath, "run", "-c", configPath)
 	cmd.Dir = filepath.Dir(m.binaryPath)
+	cmd.SysProcAttr = hiddenProcessAttributes()
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -500,6 +502,7 @@ func (m *Manager) cleanupStaleProcessesLocked() error {
 		}
 
 		cmd := exec.Command("taskkill", "/PID", strconv.Itoa(pid), "/T", "/F")
+		cmd.SysProcAttr = hiddenProcessAttributes()
 		if output, err := cmd.CombinedOutput(); err != nil {
 			return fmt.Errorf("failed to cleanup stale xray process %d: %w (%s)", pid, err, strings.TrimSpace(string(output)))
 		}
@@ -516,7 +519,9 @@ func findBinaryProcessIDs(binaryPath string) ([]int, error) {
 		escapedPath,
 	)
 
-	output, err := exec.Command("powershell", "-NoProfile", "-Command", script).CombinedOutput()
+	cmd := exec.Command("powershell", "-NoProfile", "-Command", script)
+	cmd.SysProcAttr = hiddenProcessAttributes()
+	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("failed to inspect existing xray processes: %w (%s)", err, strings.TrimSpace(string(output)))
 	}
@@ -763,6 +768,17 @@ func getProcessIoCounters(handle windows.Handle, counters *windows.IO_COUNTERS) 
 		return e1
 	}
 	return errors.New("GetProcessIoCounters failed")
+}
+
+func hiddenProcessAttributes() *syscall.SysProcAttr {
+	if runtime.GOOS != "windows" {
+		return nil
+	}
+
+	return &syscall.SysProcAttr{
+		HideWindow:    true,
+		CreationFlags: windows.CREATE_NO_WINDOW,
+	}
 }
 
 func queryGoogleDNS(conn net.Conn) error {

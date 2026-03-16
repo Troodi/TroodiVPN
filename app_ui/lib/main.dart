@@ -709,11 +709,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
   late final TextEditingController directController;
   late final TextEditingController blockedController;
   late final TextEditingController searchController;
+  late final TextEditingController ruleTestController;
+  late final TextEditingController vpnSearchController;
+  late final TextEditingController directSearchController;
+  late final TextEditingController blockedSearchController;
 
   List<String> proxyDomains = const [];
   List<String> directDomains = const [];
   List<String> blockedDomains = const [];
   List<ServerProfile> profiles = const [];
+  final Set<String> disabledVpnRules = <String>{};
+  final Set<String> disabledDirectRules = <String>{};
+  final Set<String> disabledBlockedRules = <String>{};
 
   String activeProfileId = '';
 
@@ -725,6 +732,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     directController = TextEditingController();
     blockedController = TextEditingController();
     searchController = TextEditingController();
+    ruleTestController = TextEditingController();
+    vpnSearchController = TextEditingController();
+    directSearchController = TextEditingController();
+    blockedSearchController = TextEditingController();
     _bootstrap();
     pollTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       _refreshState(silent: true);
@@ -739,6 +750,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     directController.dispose();
     blockedController.dispose();
     searchController.dispose();
+    ruleTestController.dispose();
+    vpnSearchController.dispose();
+    directSearchController.dispose();
+    blockedSearchController.dispose();
     super.dispose();
   }
 
@@ -927,7 +942,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               SizedBox(
-                width: 280,
+                width: 248,
                 child: _Sidebar(
                   connection: connection,
                   isConnecting: isConnecting,
@@ -1216,6 +1231,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     proxyDomains = List<String>.from(config.proxyDomains);
     directDomains = List<String>.from(config.directDomains);
     blockedDomains = List<String>.from(config.blockedDomains);
+    disabledVpnRules.removeWhere((item) => !proxyDomains.contains(item));
+    disabledDirectRules.removeWhere((item) => !directDomains.contains(item));
+    disabledBlockedRules.removeWhere((item) => !blockedDomains.contains(item));
     profiles = List<ServerProfile>.from(config.profiles);
     activeProfileId = config.activeProfileId;
     runtimeStatus = snapshot.runtime;
@@ -1360,101 +1378,465 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildRulesView() {
+    final testResult = _testRule(ruleTestController.text);
     return LayoutBuilder(
       builder: (context, constraints) {
-        final useThreeColumns = constraints.maxWidth >= 1050;
-        final useTwoColumns = constraints.maxWidth >= 700;
-        final cards = _rulesCards();
+        final columns = [
+          _buildRulesColumnCard(
+            title: 'Via VPN',
+            subtitle: 'Use VPN for these domains',
+            counter: proxyDomains.length,
+            searchController: vpnSearchController,
+            inputController: proxyController,
+            placeholder: 'github.com',
+            domains: proxyDomains,
+            disabledRules: disabledVpnRules,
+            accent: const Color(0xFF6CEB86),
+            emptyText: 'No VPN rules yet.',
+            onAdd: () => _addDomain(
+              proxyController,
+              proxyDomains,
+              (items) =>
+                  _saveConfig(_currentConfig().copyWith(proxyDomains: items)),
+            ),
+            onPaste: () => _pasteRuleList(
+              proxyDomains,
+              (items) =>
+                  _saveConfig(_currentConfig().copyWith(proxyDomains: items)),
+            ),
+            onRemove: (domain) => _saveConfig(
+              _currentConfig().copyWith(
+                proxyDomains:
+                    proxyDomains.where((item) => item != domain).toList(),
+              ),
+            ),
+            onToggleRule: (domain, enabled) {
+              setState(() {
+                if (enabled) {
+                  disabledVpnRules.remove(domain);
+                } else {
+                  disabledVpnRules.add(domain);
+                }
+              });
+            },
+          ),
+          _buildRulesColumnCard(
+            title: 'Open normally',
+            subtitle: 'Bypass VPN for these domains',
+            counter: directDomains.length,
+            searchController: directSearchController,
+            inputController: directController,
+            placeholder: 'bank.ru',
+            domains: directDomains,
+            disabledRules: disabledDirectRules,
+            accent: const Color(0xFF8EA2FF),
+            emptyText: 'No direct rules yet.',
+            onAdd: () => _addDomain(
+              directController,
+              directDomains,
+              (items) =>
+                  _saveConfig(_currentConfig().copyWith(directDomains: items)),
+            ),
+            onPaste: () => _pasteRuleList(
+              directDomains,
+              (items) =>
+                  _saveConfig(_currentConfig().copyWith(directDomains: items)),
+            ),
+            onRemove: (domain) => _saveConfig(
+              _currentConfig().copyWith(
+                directDomains:
+                    directDomains.where((item) => item != domain).toList(),
+              ),
+            ),
+            onToggleRule: (domain, enabled) {
+              setState(() {
+                if (enabled) {
+                  disabledDirectRules.remove(domain);
+                } else {
+                  disabledDirectRules.add(domain);
+                }
+              });
+            },
+          ),
+          _buildRulesColumnCard(
+            title: 'Blocked',
+            subtitle: 'Drop traffic for these domains',
+            counter: blockedDomains.length,
+            searchController: blockedSearchController,
+            inputController: blockedController,
+            placeholder: 'ads.example.com',
+            domains: blockedDomains,
+            disabledRules: disabledBlockedRules,
+            accent: const Color(0xFFFF9E8B),
+            emptyText: 'No blocked rules yet.',
+            onAdd: () => _addDomain(
+              blockedController,
+              blockedDomains,
+              (items) =>
+                  _saveConfig(_currentConfig().copyWith(blockedDomains: items)),
+            ),
+            onPaste: () => _pasteRuleList(
+              blockedDomains,
+              (items) =>
+                  _saveConfig(_currentConfig().copyWith(blockedDomains: items)),
+            ),
+            onRemove: (domain) => _saveConfig(
+              _currentConfig().copyWith(
+                blockedDomains:
+                    blockedDomains.where((item) => item != domain).toList(),
+              ),
+            ),
+            onToggleRule: (domain, enabled) {
+              setState(() {
+                if (enabled) {
+                  disabledBlockedRules.remove(domain);
+                } else {
+                  disabledBlockedRules.add(domain);
+                }
+              });
+            },
+          ),
+        ];
 
-        if (useThreeColumns) {
-          return ListView(
-            children: [
-              const _PageHeader(
-                eyebrow: 'Rules',
-                title: 'Routing rules',
-                description:
-                    'Choose routing mode and edit domain lists that go via proxy, direct, or blocked.',
-              ),
-              const SizedBox(height: 16),
-              _RoutingModeCard(
-                routingMode: routingMode,
-                onModeChanged: (value) =>
-                    _saveConfig(_currentConfig().copyWith(routingMode: value)),
-              ),
-              const SizedBox(height: 16),
-              const _RulesSummaryCard(),
-              const SizedBox(height: 16),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(child: cards[0]),
-                  const SizedBox(width: 16),
-                  Expanded(child: cards[1]),
-                  const SizedBox(width: 16),
-                  Expanded(child: cards[2]),
-                ],
-              ),
-            ],
+        final conflicts = _findRuleConflicts();
+
+        final listChildren = <Widget>[
+          _RulesModeCard(
+            routingMode: routingMode,
+            onModeChanged: (value) =>
+                _saveConfig(_currentConfig().copyWith(routingMode: value)),
+          ),
+          const SizedBox(height: 16),
+          _RoutingTreeCard(
+            routingMode: routingMode,
+            vpnDomains: _enabledRules(proxyDomains, disabledVpnRules),
+            directDomains: _enabledRules(directDomains, disabledDirectRules),
+          ),
+          const SizedBox(height: 16),
+          _RulesVisualizationCard(
+            routingMode: routingMode,
+            vpnDomains: _enabledRules(proxyDomains, disabledVpnRules),
+            directDomains: _enabledRules(directDomains, disabledDirectRules),
+            blockedDomains: _enabledRules(blockedDomains, disabledBlockedRules),
+          ),
+          const SizedBox(height: 16),
+          _RuleTesterCard(
+            controller: ruleTestController,
+            result: testResult,
+            onChanged: () => setState(() {}),
+          ),
+          if (conflicts.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            _RuleConflictsCard(conflicts: conflicts),
+          ],
+          const SizedBox(height: 16),
+        ];
+
+        if (constraints.maxWidth >= 1100) {
+          listChildren.add(
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: columns[0]),
+                const SizedBox(width: 16),
+                Expanded(child: columns[1]),
+                const SizedBox(width: 16),
+                Expanded(child: columns[2]),
+              ],
+            ),
           );
+        } else if (constraints.maxWidth >= 760) {
+          listChildren.add(
+            GridView.count(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisCount: 2,
+              childAspectRatio: 0.9,
+              crossAxisSpacing: 16,
+              mainAxisSpacing: 16,
+              children: columns,
+            ),
+          );
+        } else {
+          listChildren.addAll([
+            columns[0],
+            const SizedBox(height: 16),
+            columns[1],
+            const SizedBox(height: 16),
+            columns[2],
+          ]);
         }
 
-        if (useTwoColumns) {
-          return ListView(
-            children: [
-              const _PageHeader(
-                eyebrow: 'Rules',
-                title: 'Routing rules',
-                description:
-                    'Choose routing mode and edit domain lists that go via proxy, direct, or blocked.',
-              ),
-              const SizedBox(height: 16),
-              _RoutingModeCard(
-                routingMode: routingMode,
-                onModeChanged: (value) =>
-                    _saveConfig(_currentConfig().copyWith(routingMode: value)),
-              ),
-              const SizedBox(height: 16),
-              const _RulesSummaryCard(),
-              const SizedBox(height: 16),
-              GridView.count(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                crossAxisCount: 2,
-                crossAxisSpacing: 16,
-                mainAxisSpacing: 16,
-                childAspectRatio: 1.05,
-                children: cards,
-              ),
-            ],
-          );
-        }
+        listChildren.addAll([
+          const SizedBox(height: 16),
+          _RulesQuickActionsCard(
+            onReset: _resetRules,
+            onRestoreRecommended: _restoreRecommendedRules,
+          ),
+        ]);
 
-        return ListView.separated(
-          itemCount: cards.length + 3,
-          separatorBuilder: (context, index) => const SizedBox(height: 16),
-          itemBuilder: (context, index) {
-            if (index == 0) {
-              return const _PageHeader(
-                eyebrow: 'Rules',
-                title: 'Routing rules',
-                description:
-                    'Choose routing mode and edit domain lists that go via proxy, direct, or blocked.',
-              );
-            }
-            if (index == 1) {
-              return _RoutingModeCard(
-                routingMode: routingMode,
-                onModeChanged: (value) =>
-                    _saveConfig(_currentConfig().copyWith(routingMode: value)),
-              );
-            }
-            if (index == 2) {
-              return const _RulesSummaryCard();
-            }
-            return cards[index - 3];
-          },
+        return ListView(
+          children: listChildren,
         );
       },
+    );
+  }
+
+  Widget _buildRulesColumnCard({
+    required String title,
+    required String subtitle,
+    required int counter,
+    required TextEditingController searchController,
+    required TextEditingController inputController,
+    required String placeholder,
+    required List<String> domains,
+    required Set<String> disabledRules,
+    required Color accent,
+    required String emptyText,
+    required Future<void> Function() onAdd,
+    required Future<void> Function() onPaste,
+    required Future<void> Function(String) onRemove,
+    required void Function(String domain, bool enabled) onToggleRule,
+  }) {
+    final query = searchController.text.trim().toLowerCase();
+    final filtered =
+        domains.where((item) => item.toLowerCase().contains(query)).toList();
+
+    return SizedBox(
+      height: 560,
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Colors.white.withValues(alpha: 0.10),
+              Colors.white.withValues(alpha: 0.05),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(28),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+          boxShadow: [AppShadows.darkCard],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '$title ($counter)',
+                      style: TextStyle(
+                        color: AppPalette.homeText.withValues(alpha: 0.96),
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: accent.withValues(alpha: 0.16),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      '$counter rules',
+                      style: TextStyle(
+                        color: accent,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                subtitle,
+                style: TextStyle(
+                  color: AppPalette.homeTextMuted.withValues(alpha: 0.84),
+                  fontSize: 13,
+                ),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: inputController,
+                      onSubmitted: (_) => onAdd(),
+                      style: TextStyle(
+                        color: AppPalette.homeText.withValues(alpha: 0.94),
+                        fontSize: 13,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: placeholder,
+                        hintStyle: TextStyle(
+                          color:
+                              AppPalette.homeTextMuted.withValues(alpha: 0.90),
+                        ),
+                        filled: true,
+                        fillColor: Colors.white.withValues(alpha: 0.08),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton.icon(
+                    onPressed: onAdd,
+                    icon: const Icon(Icons.add_rounded, size: 16),
+                    label: const Text('Add'),
+                    style: AppUi.primaryButton(accent),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  FilledButton.tonalIcon(
+                    onPressed: onPaste,
+                    icon: const Icon(Icons.content_paste_rounded, size: 16),
+                    label: const Text('Paste list'),
+                    style: FilledButton.styleFrom(
+                      foregroundColor: AppPalette.homeText,
+                      backgroundColor: Colors.white.withValues(alpha: 0.18),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: searchController,
+                onChanged: (_) => setState(() {}),
+                style: TextStyle(
+                  color: AppPalette.homeText.withValues(alpha: 0.94),
+                  fontSize: 13,
+                ),
+                decoration: InputDecoration(
+                  hintText: 'Search rules...',
+                  hintStyle: TextStyle(
+                    color: AppPalette.homeTextMuted.withValues(alpha: 0.90),
+                  ),
+                  prefixIcon: const Icon(Icons.search_rounded, size: 18),
+                  filled: true,
+                  fillColor: Colors.white.withValues(alpha: 0.06),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  Text(
+                    'Supported formats',
+                    style: TextStyle(
+                      color: AppPalette.homeTextMuted.withValues(alpha: 0.78),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  for (final item in const [
+                    'example.com',
+                    '*.example.com',
+                    '1.1.1.1',
+                    '192.168.0.0/24',
+                  ])
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.07),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        item,
+                        style: TextStyle(
+                          color:
+                              AppPalette.homeTextMuted.withValues(alpha: 0.78),
+                          fontSize: 10,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              SizedBox(
+                height: 280,
+                child: filtered.isEmpty
+                    ? Center(
+                        child: Text(
+                          emptyText,
+                          style: TextStyle(
+                            color: AppPalette.homeTextMuted
+                                .withValues(alpha: 0.72),
+                          ),
+                        ),
+                      )
+                    : ListView.separated(
+                        itemCount: filtered.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        itemBuilder: (context, index) {
+                          final domain = filtered[index];
+                          return Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: disabledRules.contains(domain)
+                                  ? Colors.white.withValues(alpha: 0.04)
+                                  : Colors.white.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(18),
+                              border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.08)),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(Icons.public_rounded,
+                                    size: 16, color: accent),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    domain,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: disabledRules.contains(domain)
+                                          ? AppPalette.homeTextMuted
+                                              .withValues(alpha: 0.58)
+                                          : AppPalette.homeText
+                                              .withValues(alpha: 0.95),
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 13,
+                                      decoration: disabledRules.contains(domain)
+                                          ? TextDecoration.lineThrough
+                                          : null,
+                                    ),
+                                  ),
+                                ),
+                                _RuleTypeBadge(rule: domain),
+                                const SizedBox(width: 4),
+                                Switch(
+                                  value: !disabledRules.contains(domain),
+                                  onChanged: (value) =>
+                                      onToggleRule(domain, value),
+                                ),
+                                IconButton(
+                                  onPressed: () => onRemove(domain),
+                                  icon: const Icon(Icons.delete_outline_rounded,
+                                      size: 18),
+                                  color: AppPalette.homeTextMuted
+                                      .withValues(alpha: 0.86),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -2070,6 +2452,239 @@ class _DashboardScreenState extends State<DashboardScreen> {
     await _saveProfiles(nextProfiles);
   }
 
+  Future<void> _pasteRuleList(
+    List<String> current,
+    Future<void> Function(List<String>) apply,
+  ) async {
+    final raw = await _showPasteRulesDialog();
+    if (raw == null || raw.trim().isEmpty) return;
+
+    final merged = <String>[...current];
+    for (final line in raw.split(RegExp(r'[\r\n,;]+'))) {
+      final value = _normalizeDomain(line);
+      if (value.isNotEmpty && !merged.contains(value)) {
+        merged.add(value);
+      }
+    }
+
+    await apply(merged);
+    if (mounted) {
+      _showMessage('Rules pasted from clipboard.');
+    }
+  }
+
+  Future<String?> _showPasteRulesDialog() async {
+    final controller = TextEditingController();
+    final clipboard = await Clipboard.getData('text/plain');
+    controller.text = clipboard?.text?.trim() ?? '';
+
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Paste list'),
+        content: SizedBox(
+          width: 620,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Supported formats',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.black.withValues(alpha: 0.7),
+                ),
+              ),
+              const SizedBox(height: 8),
+              const SelectableText(
+                'example.com\n*.example.com\n1.1.1.1\n192.168.0.0/24',
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: controller,
+                minLines: 8,
+                maxLines: 12,
+                decoration: const InputDecoration(
+                  hintText: 'youtube.com\ngooglevideo.com\nytimg.com',
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(controller.text),
+            child: const Text('Apply'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    return result;
+  }
+
+  Future<void> _resetRules() async {
+    await _saveConfig(
+      _currentConfig().copyWith(
+        proxyDomains: const [],
+        directDomains: const [],
+        blockedDomains: const [],
+      ),
+    );
+  }
+
+  Future<void> _restoreRecommendedRules() async {
+    await _saveConfig(
+      _currentConfig().copyWith(
+        proxyDomains: const [
+          'github.com',
+          'openai.com',
+          'chatgpt.com',
+        ],
+        directDomains: const [
+          'bank.ru',
+          'gosuslugi.ru',
+          'localhost',
+        ],
+        blockedDomains: const [
+          'doubleclick.net',
+        ],
+      ),
+    );
+  }
+
+  _RuleTestResult _testRule(String raw) {
+    final value = _normalizeDomain(raw);
+    if (value.isEmpty) {
+      return const _RuleTestResult.empty();
+    }
+
+    final enabledBlocked = _enabledRules(blockedDomains, disabledBlockedRules);
+    final enabledVpn = _enabledRules(proxyDomains, disabledVpnRules);
+    final enabledDirect = _enabledRules(directDomains, disabledDirectRules);
+
+    for (final item in enabledBlocked) {
+      if (_ruleMatches(item, value)) {
+        return _RuleTestResult(
+          input: value,
+          destination: 'Blocked',
+          matchedRule: item,
+          accent: const Color(0xFFFF9E8B),
+          hasMatch: true,
+        );
+      }
+    }
+
+    if (routingMode == RoutingMode.whitelist) {
+      for (final item in enabledVpn) {
+        if (_ruleMatches(item, value)) {
+          return _RuleTestResult(
+            input: value,
+            destination: 'Via VPN',
+            matchedRule: item,
+            accent: const Color(0xFF6CEB86),
+            hasMatch: true,
+          );
+        }
+      }
+      return _RuleTestResult(
+        input: value,
+        destination: 'Open normally',
+        matchedRule: 'No matching rules',
+        accent: const Color(0xFF8EA2FF),
+        hasMatch: false,
+      );
+    }
+
+    for (final item in enabledDirect) {
+      if (_ruleMatches(item, value)) {
+        return _RuleTestResult(
+          input: value,
+          destination: 'Open normally',
+          matchedRule: item,
+          accent: const Color(0xFF8EA2FF),
+          hasMatch: true,
+        );
+      }
+    }
+
+    if (routingMode == RoutingMode.blacklist ||
+        routingMode == RoutingMode.global) {
+      return _RuleTestResult(
+        input: value,
+        destination: 'Via VPN',
+        matchedRule: 'No matching rules',
+        accent: const Color(0xFF6CEB86),
+        hasMatch: false,
+      );
+    }
+
+    return const _RuleTestResult.empty();
+  }
+
+  List<String> _enabledRules(List<String> rules, Set<String> disabledRules) {
+    return rules.where((item) => !disabledRules.contains(item)).toList();
+  }
+
+  List<String> _findRuleConflicts() {
+    final conflicts = <String>{};
+    final vpn = _enabledRules(proxyDomains, disabledVpnRules);
+    final direct = _enabledRules(directDomains, disabledDirectRules);
+    final blocked = _enabledRules(blockedDomains, disabledBlockedRules);
+
+    for (final rule in vpn) {
+      if (direct.any((item) => _rulesOverlap(rule, item))) {
+        conflicts.add('$rule conflicts between Via VPN and Open normally');
+      }
+      if (blocked.any((item) => _rulesOverlap(rule, item))) {
+        conflicts.add('$rule conflicts between Via VPN and Blocked');
+      }
+    }
+
+    for (final rule in direct) {
+      if (blocked.any((item) => _rulesOverlap(rule, item))) {
+        conflicts.add('$rule conflicts between Open normally and Blocked');
+      }
+    }
+
+    return conflicts.toList();
+  }
+
+  bool _rulesOverlap(String left, String right) {
+    final a = _normalizeDomain(left);
+    final b = _normalizeDomain(right);
+    if (a == b) return true;
+    if (a.startsWith('*.') &&
+        (b == a.substring(2) || b.endsWith('.${a.substring(2)}'))) {
+      return true;
+    }
+    if (b.startsWith('*.') &&
+        (a == b.substring(2) || a.endsWith('.${b.substring(2)}'))) {
+      return true;
+    }
+    return false;
+  }
+
+  bool _ruleMatches(String rule, String value) {
+    final normalizedRule = _normalizeDomain(rule);
+    if (normalizedRule.isEmpty) {
+      return false;
+    }
+    if (normalizedRule == value) {
+      return true;
+    }
+    if (normalizedRule.startsWith('*.')) {
+      return value == normalizedRule.substring(2) ||
+          value.endsWith('.${normalizedRule.substring(2)}');
+    }
+    return value.endsWith('.$normalizedRule');
+  }
+
   String _normalizeDomain(String raw) {
     final trimmed = raw.trim().toLowerCase();
     if (trimmed.isEmpty) {
@@ -2169,32 +2784,21 @@ class _Sidebar extends StatelessWidget {
         children: [
           Row(
             children: [
-              Container(
-                width: 56,
-                height: 56,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: const Color(0xFF0A86B6),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF24A0E0).withValues(alpha: 0.34),
-                      blurRadius: 18,
-                      spreadRadius: 1,
-                    ),
-                  ],
-                ),
-                child: const Icon(
-                  Icons.toggle_on_rounded,
-                  color: Colors.white,
-                  size: 30,
+              ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: Image.asset(
+                  'windows/runner/resources/troodi_icon_preview.png',
+                  width: 42,
+                  height: 42,
+                  fit: BoxFit.cover,
                 ),
               ),
-              const SizedBox(width: 14),
+              const SizedBox(width: 10),
               const Expanded(
                 child: Text(
                   'Troodi VPN',
                   style: TextStyle(
-                    fontSize: 18,
+                    fontSize: 17,
                     fontWeight: FontWeight.w700,
                     color: AppPalette.homeText,
                   ),
@@ -2203,14 +2807,18 @@ class _Sidebar extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 18),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.96),
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: [AppShadows.soft],
+          for (var index = 0; index < items.length; index++) ...[
+            _NavButton(
+              label: items[index].$2,
+              icon: items[index].$3,
+              selected: items[index].$1 == selectedPage,
+              onTap: () => onSelect(items[index].$1),
             ),
+            const SizedBox(height: 8),
+          ],
+          const Spacer(),
+          _SidebarInfoCard(
+            title: 'Connection info',
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -2222,72 +2830,49 @@ class _Sidebar extends StatelessWidget {
                           : connection == ConnectionStateValue.connected
                               ? Icons.check_circle_rounded
                               : Icons.pause_circle_filled_rounded,
-                      size: 22,
+                      size: 18,
                       color: isConnecting
-                          ? const Color(0xFF5573E6)
+                          ? const Color(0xFF8EA2FF)
                           : connection == ConnectionStateValue.connected
-                              ? const Color(0xFF2F8C60)
-                              : const Color(0xFF9A6A22),
+                              ? const Color(0xFF6CEB86)
+                              : const Color(0xFFFFC06A),
                     ),
-                    const SizedBox(width: 10),
+                    const SizedBox(width: 8),
                     Text(
                       isConnecting
                           ? 'Connecting'
                           : connection == ConnectionStateValue.connected
                               ? 'Connected'
                               : 'Disconnected',
-                      style: const TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w800,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: AppPalette.homeText.withValues(alpha: 0.94),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 14),
-                Text(
-                  'Connection info',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.black.withValues(alpha: 0.54),
-                  ),
-                ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
                 _StatusRow(
                   label: 'Ping',
                   value: latencyMs > 0 ? '$latencyMs ms' : 'n/a',
-                  dark: false,
+                  dark: true,
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 8),
                 _StatusRow(
                   label: 'IP',
                   value: externalIp.isEmpty ? 'n/a' : externalIp,
-                  dark: false,
+                  dark: true,
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 14),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(22),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-            ),
+          const SizedBox(height: 10),
+          _SidebarInfoCard(
+            title: 'Network activity',
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Network activity',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: AppPalette.homeText.withValues(alpha: 0.92),
-                  ),
-                ),
-                const SizedBox(height: 12),
                 _SidebarTrafficRow(
                   icon: Icons.arrow_upward_rounded,
                   iconColor: const Color(0xFF6CEB86),
@@ -2302,17 +2887,7 @@ class _Sidebar extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 22),
-          for (var index = 0; index < items.length; index++) ...[
-            _NavButton(
-              label: items[index].$2,
-              icon: items[index].$3,
-              selected: items[index].$1 == selectedPage,
-              onTap: () => onSelect(items[index].$1),
-            ),
-            const SizedBox(height: 10),
-          ],
-          const SizedBox(height: 18),
+          const SizedBox(height: 16),
           Container(
             height: 1,
             color: Colors.white.withValues(alpha: 0.08),
@@ -2343,7 +2918,7 @@ class _Sidebar extends StatelessWidget {
                             ? activeProfileName
                             : 'No profile selected',
                         style: const TextStyle(
-                          fontSize: 15,
+                          fontSize: 14,
                           fontWeight: FontWeight.w700,
                           color: AppPalette.homeText,
                         ),
@@ -2365,6 +2940,44 @@ class _Sidebar extends StatelessWidget {
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SidebarInfoCard extends StatelessWidget {
+  const _SidebarInfoCard({
+    required this.title,
+    required this.child,
+  });
+
+  final String title;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: AppPalette.homeText.withValues(alpha: 0.92),
+            ),
+          ),
+          const SizedBox(height: 10),
+          child,
         ],
       ),
     );
@@ -3427,6 +4040,585 @@ class _RoutingModeCard extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _RulesModeCard extends StatelessWidget {
+  const _RulesModeCard({
+    required this.routingMode,
+    required this.onModeChanged,
+  });
+
+  final RoutingMode routingMode;
+  final ValueChanged<RoutingMode> onModeChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return _RulesGlassCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Routing mode',
+            style: TextStyle(
+              color: AppPalette.homeText.withValues(alpha: 0.96),
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: AppPalette.homeAccent.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text(
+              'Active mode',
+              style: TextStyle(
+                color: AppPalette.homeText.withValues(alpha: 0.94),
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              _ModeChoiceChip(
+                label: 'Protect all traffic',
+                selected: routingMode == RoutingMode.global,
+                onTap: () => onModeChanged(RoutingMode.global),
+              ),
+              _ModeChoiceChip(
+                label: 'Only selected sites',
+                selected: routingMode == RoutingMode.whitelist,
+                onTap: () => onModeChanged(RoutingMode.whitelist),
+              ),
+              _ModeChoiceChip(
+                label: 'Exclude sites',
+                selected: routingMode == RoutingMode.blacklist,
+                onTap: () => onModeChanged(RoutingMode.blacklist),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Text(
+            _modeExplanation(routingMode),
+            style: TextStyle(
+              color: AppPalette.homeTextMuted.withValues(alpha: 0.82),
+              fontSize: 13,
+              height: 1.45,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RulesVisualizationCard extends StatelessWidget {
+  const _RulesVisualizationCard({
+    required this.routingMode,
+    required this.vpnDomains,
+    required this.directDomains,
+    required this.blockedDomains,
+  });
+
+  final RoutingMode routingMode;
+  final List<String> vpnDomains;
+  final List<String> directDomains;
+  final List<String> blockedDomains;
+
+  @override
+  Widget build(BuildContext context) {
+    final lines = switch (routingMode) {
+      RoutingMode.global => [
+          'All traffic → VPN',
+          if (directDomains.isNotEmpty)
+            'Except: ${directDomains.take(3).join(', ')}',
+        ],
+      RoutingMode.whitelist => [
+          'Only selected sites → VPN',
+          if (vpnDomains.isNotEmpty) vpnDomains.take(3).join(', '),
+        ],
+      RoutingMode.blacklist => [
+          'All traffic → VPN',
+          if (directDomains.isNotEmpty)
+            'Except: ${directDomains.take(3).join(', ')}',
+        ],
+    };
+
+    return _RulesGlassCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Traffic routing',
+            style: TextStyle(
+              color: AppPalette.homeText.withValues(alpha: 0.96),
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 12),
+          ...lines.map(
+            (line) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                line,
+                style: TextStyle(
+                  color: AppPalette.homeText.withValues(alpha: 0.9),
+                  fontSize: 14,
+                ),
+              ),
+            ),
+          ),
+          if (blockedDomains.isNotEmpty)
+            Text(
+              'Blocked: ${blockedDomains.take(2).join(', ')}',
+              style: TextStyle(
+                color: const Color(0xFFFFA69A),
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RoutingTreeCard extends StatelessWidget {
+  const _RoutingTreeCard({
+    required this.routingMode,
+    required this.vpnDomains,
+    required this.directDomains,
+  });
+
+  final RoutingMode routingMode;
+  final List<String> vpnDomains;
+  final List<String> directDomains;
+
+  @override
+  Widget build(BuildContext context) {
+    return _RulesGlassCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Routing preview',
+            style: TextStyle(
+              color: AppPalette.homeText.withValues(alpha: 0.96),
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Internet',
+            style: TextStyle(
+              color: AppPalette.homeText.withValues(alpha: 0.92),
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          Text(
+            '  │\n  ▼',
+            style: TextStyle(
+              color: AppPalette.homeTextMuted.withValues(alpha: 0.8),
+              height: 1.15,
+            ),
+          ),
+          Text(
+            'VPN tunnel',
+            style: TextStyle(
+              color: AppPalette.homeText.withValues(alpha: 0.92),
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (routingMode == RoutingMode.whitelist) ...[
+            for (final item in vpnDomains.take(3))
+              _RoutingTreeLine(label: '$item → Via VPN'),
+            const _RoutingTreeLine(
+              label: 'Other traffic → Open normally',
+              faded: true,
+            ),
+          ] else ...[
+            for (final item in directDomains.take(3))
+              _RoutingTreeLine(label: '$item → Direct'),
+            const _RoutingTreeLine(label: 'Other traffic → VPN'),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _RoutingTreeLine extends StatelessWidget {
+  const _RoutingTreeLine({
+    required this.label,
+    this.faded = false,
+  });
+
+  final String label;
+  final bool faded;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Text(
+        '  ├── $label',
+        style: TextStyle(
+          color: faded
+              ? AppPalette.homeTextMuted.withValues(alpha: 0.72)
+              : AppPalette.homeText.withValues(alpha: 0.9),
+          fontSize: 13,
+        ),
+      ),
+    );
+  }
+}
+
+class _RuleTesterCard extends StatelessWidget {
+  const _RuleTesterCard({
+    required this.controller,
+    required this.result,
+    required this.onChanged,
+  });
+
+  final TextEditingController controller;
+  final _RuleTestResult result;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return _RulesGlassCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Test domain / IP',
+            style: TextStyle(
+              color: AppPalette.homeText.withValues(alpha: 0.96),
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: controller,
+                  onChanged: (_) => onChanged(),
+                  style: TextStyle(
+                    color: AppPalette.homeText.withValues(alpha: 0.94),
+                    fontSize: 13,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: 'example.com',
+                    hintStyle: TextStyle(
+                      color: AppPalette.homeTextMuted.withValues(alpha: 0.90),
+                    ),
+                    filled: true,
+                    fillColor: Colors.white.withValues(alpha: 0.08),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              FilledButton(
+                onPressed: onChanged,
+                child: const Text('Test'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: result.isEmpty
+                ? Text(
+                    'Result will appear here.',
+                    style: TextStyle(
+                      color: AppPalette.homeTextMuted.withValues(alpha: 0.72),
+                      fontSize: 13,
+                    ),
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Result:',
+                        style: TextStyle(
+                          color: AppPalette.homeText.withValues(alpha: 0.94),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        '${result.input} -> ${result.destination}',
+                        style: TextStyle(
+                          color: result.accent,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        result.hasMatch
+                            ? 'Matched rule: ${result.matchedRule}'
+                            : 'No matching rules',
+                        style: TextStyle(
+                          color:
+                              AppPalette.homeTextMuted.withValues(alpha: 0.82),
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RulesQuickActionsCard extends StatelessWidget {
+  const _RulesQuickActionsCard({
+    required this.onReset,
+    required this.onRestoreRecommended,
+  });
+
+  final Future<void> Function() onReset;
+  final Future<void> Function() onRestoreRecommended;
+
+  @override
+  Widget build(BuildContext context) {
+    return _RulesGlassCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Quick actions',
+            style: TextStyle(
+              color: AppPalette.homeText.withValues(alpha: 0.96),
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: onReset,
+                  icon: const Icon(Icons.restart_alt_rounded),
+                  label: const Text('Reset rules'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: onRestoreRecommended,
+                  icon: const Icon(Icons.auto_fix_high_rounded),
+                  label: const Text('Restore recommended rules'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RulesGlassCard extends StatelessWidget {
+  const _RulesGlassCard({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.white.withValues(alpha: 0.10),
+            Colors.white.withValues(alpha: 0.05),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+        boxShadow: [AppShadows.darkCard],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: child,
+      ),
+    );
+  }
+}
+
+class _RuleConflictsCard extends StatelessWidget {
+  const _RuleConflictsCard({required this.conflicts});
+
+  final List<String> conflicts;
+
+  @override
+  Widget build(BuildContext context) {
+    return _RulesGlassCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Rule conflicts',
+            style: TextStyle(
+              color: const Color(0xFFFFC7BC),
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 10),
+          for (final item in conflicts.take(5))
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                '• $item',
+                style: TextStyle(
+                  color: AppPalette.homeText.withValues(alpha: 0.9),
+                  fontSize: 13,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ModeChoiceChip extends StatelessWidget {
+  const _ModeChoiceChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: selected
+                ? AppPalette.homeAccent.withValues(alpha: 0.22)
+                : Colors.white.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: selected
+                  ? AppPalette.homeAccent.withValues(alpha: 0.6)
+                  : Colors.white.withValues(alpha: 0.08),
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: AppPalette.homeText.withValues(alpha: 0.95),
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RuleTypeBadge extends StatelessWidget {
+  const _RuleTypeBadge({required this.rule});
+
+  final String rule;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = rule.contains('/')
+        ? 'CIDR'
+        : RegExp(r'^\d+\.\d+\.\d+\.\d+$').hasMatch(rule)
+            ? 'IP'
+            : rule.startsWith('*.')
+                ? 'WILDCARD'
+                : 'DOMAIN';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: AppPalette.homeTextMuted.withValues(alpha: 0.88),
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
+class _RuleTestResult {
+  const _RuleTestResult({
+    required this.input,
+    required this.destination,
+    required this.matchedRule,
+    required this.accent,
+    required this.hasMatch,
+  });
+
+  const _RuleTestResult.empty()
+      : input = '',
+        destination = '',
+        matchedRule = '',
+        accent = Colors.transparent,
+        hasMatch = false;
+
+  final String input;
+  final String destination;
+  final String matchedRule;
+  final Color accent;
+  final bool hasMatch;
+
+  bool get isEmpty => input.isEmpty;
+}
+
+String _modeExplanation(RoutingMode mode) {
+  switch (mode) {
+    case RoutingMode.global:
+      return 'All traffic goes through VPN except domains listed in Open normally.';
+    case RoutingMode.whitelist:
+      return 'Only domains from Via VPN use the VPN. Everything else opens normally.';
+    case RoutingMode.blacklist:
+      return 'All traffic goes through VPN except domains listed in Open normally.';
   }
 }
 

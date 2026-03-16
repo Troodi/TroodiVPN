@@ -917,6 +917,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   connection: connection,
                   routingMode: routingMode,
                   dnsMode: dnsMode,
+                  latencyMs: runtimeStatus.latencyMs,
+                  externalIp: externalIp,
+                  hasActiveProfile: hasActiveProfile,
+                  activeProfileName: hasActiveProfile ? activeProfile.name : '',
                   selectedPage: selectedPage,
                   onSelect: (page) {
                     setState(() {
@@ -973,6 +977,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
 
     try {
+      final ready = await _ensureBackendReady(silent: silent);
+      if (!ready) {
+        return;
+      }
       final snapshot = await backend.getState();
       if (!mounted) {
         return;
@@ -1001,6 +1009,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+  Future<bool> _ensureBackendReady({bool silent = false}) async {
+    try {
+      await backendRuntime.ensureRunning();
+      return true;
+    } catch (error) {
+      if (!mounted) {
+        return false;
+      }
+      if (!silent) {
+        setState(() {
+          isLoading = false;
+          errorMessage = error.toString();
+        });
+        _showMessage(error.toString(), isError: true);
+      }
+      return false;
+    }
+  }
+
   Future<void> _saveConfig(AppConfigState config) async {
     setState(() {
       isBusy = true;
@@ -1008,6 +1035,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
 
     try {
+      final ready = await _ensureBackendReady();
+      if (!ready) {
+        return;
+      }
       final snapshot = await backend.updateState(config);
       if (!mounted) {
         return;
@@ -1043,6 +1074,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
 
     try {
+      final ready = await _ensureBackendReady();
+      if (!ready) {
+        return;
+      }
       final snapshot = connection == ConnectionStateValue.connected
           ? await backend.disconnect()
           : await backend.connect();
@@ -1096,6 +1131,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<bool> _ensureAdminForTun() async {
+    final ready = await _ensureBackendReady();
+    if (!ready) {
+      return false;
+    }
+
     final elevated = runtimeStatus.elevated || await backend.getAdminStatus();
     if (elevated) {
       return true;
@@ -1317,13 +1357,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   },
                   tunnelMode: tunnelMode,
                   onTunnelModeChanged: _switchTunnelMode,
-                  externalIp: externalIp,
-                  isLoadingExternalIp: isLoadingExternalIp,
-                  statusText: runtimeStatus.running
-                      ? '${runtimeStatus.mode.toUpperCase()} • ${runtimeStatus.latencyMs > 0 ? '${runtimeStatus.latencyMs} ms' : 'ping n/a'}'
-                      : runtimeStatus.lastError.isNotEmpty
-                          ? runtimeStatus.lastError
-                          : 'Core offline',
                 ),
                 if (!canConnect) ...[
                   const SizedBox(height: 16),
@@ -2099,6 +2132,10 @@ class _Sidebar extends StatelessWidget {
     required this.connection,
     required this.routingMode,
     required this.dnsMode,
+    required this.latencyMs,
+    required this.externalIp,
+    required this.hasActiveProfile,
+    required this.activeProfileName,
     required this.selectedPage,
     required this.onSelect,
   });
@@ -2106,45 +2143,126 @@ class _Sidebar extends StatelessWidget {
   final ConnectionStateValue connection;
   final RoutingMode routingMode;
   final DnsMode dnsMode;
+  final int latencyMs;
+  final String externalIp;
+  final bool hasActiveProfile;
+  final String activeProfileName;
   final AppPage selectedPage;
   final ValueChanged<AppPage> onSelect;
 
   @override
   Widget build(BuildContext context) {
     const items = [
-      (AppPage.home, 'Home', Icons.home_outlined),
-      (AppPage.rules, 'Rules', Icons.rule_folder_outlined),
-      (AppPage.profiles, 'Profiles', Icons.dns_outlined),
-      (AppPage.settings, 'Settings', Icons.tune_outlined),
+      (AppPage.home, 'Home', Icons.home_filled),
+      (AppPage.profiles, 'Profiles', Icons.folder_shared_outlined),
+      (AppPage.rules, 'Rules', Icons.account_tree_outlined),
+      (AppPage.settings, 'Settings', Icons.settings_rounded),
     ];
 
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.fromLTRB(20, 22, 20, 20),
       decoration: BoxDecoration(
-        color: AppPalette.card.withValues(alpha: 0.72),
-        borderRadius: BorderRadius.circular(30),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            const Color(0xFF252946).withValues(alpha: 0.86),
+            const Color(0xFF191E37).withValues(alpha: 0.92),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(32),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        boxShadow: [AppShadows.darkCard],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
-              _TroodiLogo(size: 48),
-              SizedBox(width: 14),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Troodi VPN',
-                      style:
-                          TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
-                  SizedBox(height: 2),
-                  Text('Minimal Xray desktop client',
-                      style: TextStyle(color: Colors.black54)),
-                ],
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: const Color(0xFF0A86B6),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF24A0E0).withValues(alpha: 0.34),
+                      blurRadius: 18,
+                      spreadRadius: 1,
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.toggle_on_rounded,
+                  color: Colors.white,
+                  size: 34,
+                ),
+              ),
+              const SizedBox(width: 14),
+              const Expanded(
+                child: Text(
+                  'Troodi VPN',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    color: AppPalette.homeText,
+                  ),
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 26),
+          const SizedBox(height: 18),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.96),
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [AppShadows.soft],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      connection == ConnectionStateValue.connected
+                          ? Icons.check_circle_rounded
+                          : Icons.pause_circle_filled_rounded,
+                      size: 22,
+                      color: connection == ConnectionStateValue.connected
+                          ? const Color(0xFF2F8C60)
+                          : const Color(0xFF9A6A22),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      connection == ConnectionStateValue.connected
+                          ? 'Connected'
+                          : 'Disconnected',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                _StatusRow(
+                  label: 'Ping',
+                  value: latencyMs > 0 ? '$latencyMs ms' : 'n/a',
+                  dark: false,
+                ),
+                const SizedBox(height: 10),
+                _StatusRow(
+                  label: 'IP',
+                  value: externalIp.isEmpty ? 'n/a' : externalIp,
+                  dark: false,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 22),
           for (var index = 0; index < items.length; index++) ...[
             _NavButton(
               label: items[index].$2,
@@ -2156,28 +2274,54 @@ class _Sidebar extends StatelessWidget {
           ],
           const SizedBox(height: 18),
           Container(
+            height: 1,
+            color: Colors.white.withValues(alpha: 0.08),
+          ),
+          const SizedBox(height: 18),
+          Container(
             width: double.infinity,
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: const Color(0xFFF7F3EC),
+              color: Colors.transparent,
               borderRadius: BorderRadius.circular(24),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Quick status',
-                    style: TextStyle(fontWeight: FontWeight.w700)),
-                const SizedBox(height: 14),
-                _StatusRow(
-                  label: 'Connection',
-                  value: connection == ConnectionStateValue.connected
-                      ? 'Connected'
-                      : 'Disconnected',
+                Row(
+                  children: [
+                    Icon(
+                      hasActiveProfile
+                          ? Icons.folder_open_rounded
+                          : Icons.folder_copy_outlined,
+                      color: AppPalette.homeText.withValues(alpha: 0.84),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        hasActiveProfile
+                            ? activeProfileName
+                            : 'No profile selected',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: AppPalette.homeText,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 10),
-                _StatusRow(label: 'Routing', value: routingMode.name),
-                const SizedBox(height: 10),
-                _StatusRow(label: 'DNS', value: dnsMode.name.toUpperCase()),
+                const SizedBox(height: 14),
+                Text(
+                  hasActiveProfile
+                      ? 'Routing: ${routingMode.name} • DNS: ${dnsMode.name.toUpperCase()}'
+                      : 'Open Profiles, import or create a profile, then select it on this screen.',
+                  style: TextStyle(
+                    height: 1.45,
+                    fontSize: 14,
+                    color: AppPalette.homeTextMuted.withValues(alpha: 0.9),
+                  ),
+                ),
               ],
             ),
           ),
@@ -2511,9 +2655,9 @@ class _MobileTopBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 2),
       child: SizedBox(
-        height: 46,
+        height: 56,
         child: Row(
           children: [
             _CircleGhostIcon(icon: leading, visible: leading != null),
@@ -2522,10 +2666,17 @@ class _MobileTopBar extends StatelessWidget {
                 alignment: titleAlign,
                 child: Text(
                   title,
-                  style: const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w700,
+                  style: TextStyle(
+                    fontSize: 34,
+                    fontWeight: FontWeight.w500,
                     color: AppPalette.homeText,
+                    letterSpacing: -0.6,
+                    shadows: [
+                      Shadow(
+                        color: Colors.black.withValues(alpha: 0.18),
+                        blurRadius: 12,
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -2549,20 +2700,26 @@ class _CircleGhostIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 40,
-      height: 40,
+      width: 54,
+      height: 54,
       child: visible
           ? Container(
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: Colors.white.withValues(alpha: 0.08),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
-                boxShadow: [AppShadows.darkCard],
+                color: Colors.white.withValues(alpha: 0.1),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.24),
+                    blurRadius: 18,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
               ),
               child: Icon(
                 icon,
                 color: AppPalette.homeText.withValues(alpha: 0.9),
-                size: 22,
+                size: 28,
               ),
             )
           : const SizedBox.shrink(),
@@ -2605,9 +2762,6 @@ class _MainConnectionCard extends StatelessWidget {
     required this.onProfileChanged,
     required this.tunnelMode,
     required this.onTunnelModeChanged,
-    required this.externalIp,
-    required this.isLoadingExternalIp,
-    required this.statusText,
   });
 
   final String profileName;
@@ -2620,9 +2774,6 @@ class _MainConnectionCard extends StatelessWidget {
   final ValueChanged<String?> onProfileChanged;
   final TunnelMode tunnelMode;
   final ValueChanged<TunnelMode> onTunnelModeChanged;
-  final String externalIp;
-  final bool isLoadingExternalIp;
-  final String statusText;
 
   @override
   Widget build(BuildContext context) {
@@ -2630,44 +2781,34 @@ class _MainConnectionCard extends StatelessWidget {
     final statusLabel = connected ? 'CONNECTED' : 'DISCONNECTED';
     final statusColor =
         connected ? AppPalette.homeAccent : const Color(0xFF8D95B2);
-    final flag = _guessFlag(profileName);
     final isCompact = MediaQuery.of(context).size.width < 760;
 
-    final topCardWidth = isCompact ? double.infinity : 1040.0;
-    final bottomCardWidth = isCompact ? double.infinity : 880.0;
+    final topCardWidth = isCompact ? double.infinity : 820.0;
+    final bottomCardWidth = isCompact ? double.infinity : 630.0;
 
     return Container(
-      padding: const EdgeInsets.all(10),
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 18),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const SizedBox(height: 4),
-          const _MobileTopBar(
-            title: 'Troodi VPN',
-            leading: Icons.menu,
-            trailing: Icons.account_circle_outlined,
-          )
-              .animate()
-              .fadeIn(duration: 320.ms)
-              .slideY(begin: -0.08, end: 0, curve: Curves.easeOutCubic),
-          const SizedBox(height: 16),
+          const SizedBox(height: 18),
           Center(
             child: ConstrainedBox(
               constraints: BoxConstraints(maxWidth: topCardWidth),
               child: Container(
-                padding: const EdgeInsets.fromLTRB(22, 20, 22, 16),
+                padding: const EdgeInsets.fromLTRB(28, 20, 28, 18),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: [
-                      Colors.white.withValues(alpha: 0.12),
-                      Colors.white.withValues(alpha: 0.06),
+                      Colors.white.withValues(alpha: 0.15),
+                      Colors.white.withValues(alpha: 0.08),
                     ],
                   ),
-                  borderRadius: BorderRadius.circular(30),
+                  borderRadius: BorderRadius.circular(32),
                   border:
-                      Border.all(color: Colors.white.withValues(alpha: 0.14)),
+                      Border.all(color: Colors.white.withValues(alpha: 0.12)),
                   boxShadow: [AppShadows.darkCard],
                 ),
                 child: Column(
@@ -2675,15 +2816,15 @@ class _MainConnectionCard extends StatelessWidget {
                     Text(
                       'Network Activity',
                       style: TextStyle(
-                        color: AppPalette.homeText.withValues(alpha: 0.78),
-                        fontSize: 20,
-                        fontWeight: FontWeight.w500,
+                        color: AppPalette.homeText.withValues(alpha: 0.76),
+                        fontSize: isCompact ? 18 : 21,
+                        fontWeight: FontWeight.w400,
                       ),
                     ),
                     const SizedBox(height: 14),
                     Divider(
                       height: 1,
-                      color: Colors.white.withValues(alpha: 0.12),
+                      color: Colors.white.withValues(alpha: 0.11),
                     ),
                     const SizedBox(height: 18),
                     Row(
@@ -2691,47 +2832,26 @@ class _MainConnectionCard extends StatelessWidget {
                         Expanded(
                           child: _TrafficStat(
                             label: 'Download',
-                            value: connected ? '0 B/s' : '0 B/s',
+                            value: '0 B/s',
                             icon: Icons.arrow_downward_rounded,
                             iconColor: const Color(0xFF71C6FF),
                           ),
                         ),
                         Container(
                           width: 1,
-                          height: 60,
-                          color: Colors.white.withValues(alpha: 0.14),
+                          height: 76,
+                          color: Colors.white.withValues(alpha: 0.1),
                         ),
                         Expanded(
                           child: _TrafficStat(
                             label: 'Upload',
-                            value: connected ? '0 B/s' : '0 B/s',
+                            value: '0 B/s',
                             icon: Icons.arrow_upward_rounded,
                             iconColor: const Color(0xFFA9A8FF),
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 10),
-                    Text(
-                      statusText,
-                      style: TextStyle(
-                        color: AppPalette.homeTextMuted,
-                        fontSize: 16,
-                      ),
-                    ),
-                    if (externalIp.isNotEmpty || isLoadingExternalIp) ...[
-                      const SizedBox(height: 6),
-                      Text(
-                        isLoadingExternalIp
-                            ? 'IP checking...'
-                            : 'Public IP: $externalIp',
-                        style: TextStyle(
-                          color: AppPalette.homeText.withValues(alpha: 0.72),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
                   ],
                 ),
               ),
@@ -2740,29 +2860,29 @@ class _MainConnectionCard extends StatelessWidget {
               .animate(delay: 90.ms)
               .fadeIn(duration: 360.ms)
               .scale(begin: const Offset(0.96, 0.96), end: const Offset(1, 1)),
-          const SizedBox(height: 22),
+          SizedBox(height: isCompact ? 30 : 36),
           Center(
             child: Text(
               statusLabel,
               style: TextStyle(
-                letterSpacing: 1.2,
-                fontWeight: FontWeight.w500,
-                fontSize: isCompact ? 26 : 32,
+                letterSpacing: isCompact ? 2.6 : 3.6,
+                fontWeight: FontWeight.w300,
+                fontSize: isCompact ? 28 : 40,
                 color: AppPalette.homeTextMuted.withValues(alpha: 0.88),
               ),
             ),
           ).animate(delay: 150.ms).fadeIn(duration: 240.ms),
-          const SizedBox(height: 14),
+          SizedBox(height: isCompact ? 14 : 18),
           Center(
             child: Container(
-              width: isCompact ? 136 : 146,
-              height: isCompact ? 136 : 146,
+              width: isCompact ? 152 : 164,
+              height: isCompact ? 152 : 164,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: RadialGradient(
                   colors: [
-                    Colors.white.withValues(alpha: 0.9),
-                    const Color(0xFFD2D9F0).withValues(alpha: 0.86),
+                    Colors.white.withValues(alpha: 0.98),
+                    const Color(0xFFD7DEF3).withValues(alpha: 0.92),
                   ],
                 ),
                 border: Border.all(color: Colors.white.withValues(alpha: 0.28)),
@@ -2771,11 +2891,17 @@ class _MainConnectionCard extends StatelessWidget {
                 ],
               ),
               child: Center(
-                child: IconButton(
-                  onPressed: canConnect && !isBusy ? onToggleConnection : null,
-                  iconSize: isCompact ? 46 : 52,
-                  style: AppUi.powerButton(statusColor),
-                  icon: const Icon(Icons.power_settings_new_rounded),
+                child: MouseRegion(
+                  cursor: canConnect && !isBusy
+                      ? SystemMouseCursors.click
+                      : SystemMouseCursors.basic,
+                  child: IconButton(
+                    onPressed:
+                        canConnect && !isBusy ? onToggleConnection : null,
+                    iconSize: isCompact ? 50 : 56,
+                    style: AppUi.powerButton(statusColor),
+                    icon: const Icon(Icons.power_settings_new_rounded),
+                  ),
                 ),
               ),
             ),
@@ -2783,12 +2909,11 @@ class _MainConnectionCard extends StatelessWidget {
               .animate(delay: 160.ms)
               .fadeIn(duration: 280.ms)
               .scale(begin: const Offset(0.92, 0.92), end: const Offset(1, 1)),
-          const SizedBox(height: 22),
+          SizedBox(height: isCompact ? 28 : 34),
           Center(
             child: ConstrainedBox(
               constraints: BoxConstraints(maxWidth: bottomCardWidth),
               child: _ServerSelectCard(
-                selectedFlag: flag,
                 selectedName:
                     profileItems.isEmpty ? 'No servers yet' : profileName,
                 selectedProfileId: selectedProfileId,
@@ -2820,7 +2945,7 @@ class _MainConnectionCard extends StatelessWidget {
                     : 'Proxy: for selected apps only.',
                 style: TextStyle(
                   color: AppPalette.homeTextMuted.withValues(alpha: 0.82),
-                  fontSize: 15,
+                  fontSize: 14,
                 ),
               ),
             ),
@@ -2859,14 +2984,12 @@ class _MainConnectionCard extends StatelessWidget {
 
 class _ServerSelectCard extends StatelessWidget {
   const _ServerSelectCard({
-    required this.selectedFlag,
     required this.selectedName,
     required this.selectedProfileId,
     required this.profileItems,
     required this.onProfileChanged,
   });
 
-  final String selectedFlag;
   final String selectedName;
   final String? selectedProfileId;
   final List<ServerProfile> profileItems;
@@ -2915,7 +3038,7 @@ class _ServerSelectCard extends StatelessWidget {
                       child: Row(
                         children: [
                           const Icon(
-                            Icons.language_rounded,
+                            Icons.public_rounded,
                             color: AppPalette.homeAccent,
                           ),
                           const SizedBox(width: 8),
@@ -2971,11 +3094,12 @@ class _ServerSelectCard extends StatelessWidget {
                               ),
                               child: Row(
                                 children: [
-                                  Text(
-                                    _guessFlagFromName(profile.name),
-                                    style: const TextStyle(fontSize: 26),
+                                  const Icon(
+                                    Icons.public_rounded,
+                                    size: 22,
+                                    color: Color(0xFF73A3FF),
                                   ),
-                                  const SizedBox(width: 10),
+                                  const SizedBox(width: 12),
                                   Expanded(
                                     child: Text(
                                       profile.name,
@@ -3027,64 +3151,61 @@ class _ServerSelectCard extends StatelessWidget {
     final disabled = profileItems.isEmpty;
     return Material(
       color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(24),
-        onTap: disabled ? null : () => _openServerPicker(context),
-        child: Ink(
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                Colors.white.withValues(alpha: 0.08),
-                Colors.white.withValues(alpha: 0.05),
+      child: MouseRegion(
+        cursor: disabled ? SystemMouseCursors.basic : SystemMouseCursors.click,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: disabled ? null : () => _openServerPicker(context),
+          child: Ink(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Colors.white.withValues(alpha: 0.08),
+                  Colors.white.withValues(alpha: 0.04),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.1),
+              ),
+              boxShadow: [AppShadows.darkCard],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: AppPalette.homeAccent.withValues(alpha: 0.18),
+                  ),
+                  child: const Icon(
+                    Icons.public_rounded,
+                    color: Color(0xFF73A3FF),
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    selectedName,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w600,
+                      color: disabled
+                          ? AppPalette.homeTextMuted.withValues(alpha: 0.68)
+                          : AppPalette.homeText,
+                    ),
+                  ),
+                ),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: AppPalette.homeText.withValues(alpha: 0.72),
+                ),
               ],
             ),
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.14),
-            ),
-            boxShadow: [AppShadows.darkCard],
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: AppPalette.homeAccent.withValues(alpha: 0.22),
-                ),
-                child: Center(
-                  child: Text(
-                    selectedFlag,
-                    style: const TextStyle(fontSize: 22),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  selectedName,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w600,
-                    color: disabled
-                        ? AppPalette.homeTextMuted.withValues(alpha: 0.68)
-                        : AppPalette.homeText,
-                  ),
-                ),
-              ),
-              Icon(
-                Icons.keyboard_arrow_down_rounded,
-                color: AppPalette.homeTextMuted.withValues(alpha: 0.74),
-              ),
-              const SizedBox(width: 4),
-              Icon(
-                Icons.chevron_right_rounded,
-                color: AppPalette.homeText.withValues(alpha: 0.88),
-              ),
-            ],
           ),
         ),
       ),
@@ -3762,37 +3883,61 @@ class _NavButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        curve: Curves.easeOut,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
-        decoration: BoxDecoration(
-          color: selected ? const Color(0xFF173C4A) : const Color(0x00FFFFFF),
-          border: Border.all(
-            color: selected
-                ? const Color(0xFF173C4A)
-                : Colors.black.withValues(alpha: 0.06),
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOut,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+          decoration: BoxDecoration(
+            gradient: selected
+                ? LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Colors.white.withValues(alpha: 0.18),
+                      Colors.white.withValues(alpha: 0.08),
+                    ],
+                  )
+                : null,
+            color: selected ? null : Colors.transparent,
+            border: Border.all(
+              color: selected
+                  ? Colors.white.withValues(alpha: 0.14)
+                  : Colors.transparent,
+            ),
+            borderRadius: BorderRadius.circular(22),
           ),
-          borderRadius: BorderRadius.circular(22),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: selected ? Colors.white : Colors.black87),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                label,
-                style: TextStyle(
-                  color: selected ? Colors.white : Colors.black87,
-                  fontWeight: FontWeight.w600,
+          child: Row(
+            children: [
+              Icon(
+                icon,
+                size: 26,
+                color: selected
+                    ? AppPalette.homeText
+                    : AppPalette.homeTextMuted.withValues(alpha: 0.95),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    color: selected
+                        ? AppPalette.homeText
+                        : AppPalette.homeTextMuted.withValues(alpha: 0.95),
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                    fontSize: 17,
+                  ),
                 ),
               ),
-            ),
-            Icon(Icons.chevron_right_rounded,
-                color: selected ? Colors.white70 : Colors.black45),
-          ],
+              Icon(Icons.chevron_right_rounded,
+                  color: selected
+                      ? AppPalette.homeText.withValues(alpha: 0.72)
+                      : AppPalette.homeTextMuted.withValues(alpha: 0.64)),
+            ],
+          ),
         ),
       ),
     );
@@ -3800,10 +3945,15 @@ class _NavButton extends StatelessWidget {
 }
 
 class _StatusRow extends StatelessWidget {
-  const _StatusRow({required this.label, required this.value});
+  const _StatusRow({
+    required this.label,
+    required this.value,
+    this.dark = true,
+  });
 
   final String label;
   final String value;
+  final bool dark;
 
   @override
   Widget build(BuildContext context) {
@@ -3811,8 +3961,18 @@ class _StatusRow extends StatelessWidget {
       children: [
         Expanded(
             child: Text(label,
-                style: TextStyle(color: Colors.black.withValues(alpha: 0.55)))),
-        Text(value, style: const TextStyle(fontWeight: FontWeight.w700)),
+                style: TextStyle(
+                  color: dark
+                      ? AppPalette.homeTextMuted.withValues(alpha: 0.88)
+                      : Colors.black.withValues(alpha: 0.55),
+                ))),
+        Text(
+          value,
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+            color: dark ? AppPalette.homeText : Colors.black,
+          ),
+        ),
       ],
     );
   }

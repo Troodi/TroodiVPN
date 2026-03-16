@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -161,6 +162,9 @@ func (m *Manager) Status() Status {
 
 func (m *Manager) startLocked(cfg config.AppConfig) error {
 	if err := m.ensureBinaryLocked(); err != nil {
+		return err
+	}
+	if err := m.cleanupStaleProcessesLocked(); err != nil {
 		return err
 	}
 	if cfg.TUNEnabled && !platform.IsElevated() {
@@ -344,6 +348,9 @@ func (m *Manager) captureLogs(reader io.Reader) {
 	}
 
 	if err := scanner.Err(); err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "file already closed") {
+			return
+		}
 		m.mu.Lock()
 		m.appendLogLocked("log reader error: " + err.Error())
 		m.mu.Unlock()
@@ -430,6 +437,65 @@ func resolveBypassCIDRs(profile config.ServerProfile) ([]string, error) {
 
 func (m *Manager) isRunningLocked() bool {
 	return m.running && m.cmd != nil && m.cmd.Process != nil
+}
+
+func (m *Manager) cleanupStaleProcessesLocked() error {
+	if runtime.GOOS != "windows" {
+		return nil
+	}
+
+	pids, err := findBinaryProcessIDs(m.binaryPath)
+	if err != nil {
+		return err
+	}
+
+	currentPID := 0
+	if m.cmd != nil && m.cmd.Process != nil {
+		currentPID = m.cmd.Process.Pid
+	}
+
+	for _, pid := range pids {
+		if pid == 0 || pid == currentPID {
+			continue
+		}
+
+		cmd := exec.Command("taskkill", "/PID", strconv.Itoa(pid), "/T", "/F")
+		if output, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("failed to cleanup stale xray process %d: %w (%s)", pid, err, strings.TrimSpace(string(output)))
+		}
+		m.appendLogLocked(fmt.Sprintf("[%s] cleaned stale xray process (pid %d)", time.Now().Format(time.RFC3339), pid))
+	}
+
+	return nil
+}
+
+func findBinaryProcessIDs(binaryPath string) ([]int, error) {
+	escapedPath := strings.ReplaceAll(binaryPath, "'", "''")
+	script := fmt.Sprintf(
+		"$procs = Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -eq '%s' }; $procs | ForEach-Object { $_.ProcessId }",
+		escapedPath,
+	)
+
+	output, err := exec.Command("powershell", "-NoProfile", "-Command", script).CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("failed to inspect existing xray processes: %w (%s)", err, strings.TrimSpace(string(output)))
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	pids := make([]int, 0, len(lines))
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		pid, err := strconv.Atoi(line)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse process id %q", line)
+		}
+		pids = append(pids, pid)
+	}
+
+	return pids, nil
 }
 
 func (m *Manager) applySystemProxyLocked(cfg config.AppConfig) error {

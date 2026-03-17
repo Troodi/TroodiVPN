@@ -347,6 +347,11 @@ func buildInbounds(cfg config.AppConfig, opts BuildOptions) []map[string]any {
 				"auth": "noauth",
 				"udp":  true,
 			},
+			"sniffing": map[string]any{
+				"enabled":      true,
+				"routeOnly":    false,
+				"destOverride": []string{"http", "tls", "quic"},
+			},
 		},
 	}
 
@@ -358,6 +363,11 @@ func buildInbounds(cfg config.AppConfig, opts BuildOptions) []map[string]any {
 			"settings": map[string]any{
 				"name": opts.TUNInterface,
 				"MTU":  opts.TUNMTU,
+			},
+			"sniffing": map[string]any{
+				"enabled":      true,
+				"routeOnly":    false,
+				"destOverride": []string{"http", "tls", "quic"},
 			},
 		})
 	}

@@ -80,6 +80,7 @@ class AppConfigState {
     required this.activeProfileId,
     required this.connectionState,
     required this.routingMode,
+    required this.rulesProfile,
     required this.dnsMode,
     required this.systemProxyEnabled,
     required this.tunEnabled,
@@ -93,6 +94,7 @@ class AppConfigState {
   final String activeProfileId;
   final ConnectionStateValue connectionState;
   final RoutingMode routingMode;
+  final RulesProfile rulesProfile;
   final DnsMode dnsMode;
   final bool systemProxyEnabled;
   final bool tunEnabled;
@@ -111,6 +113,9 @@ class AppConfigState {
       routingMode: _routingModeFromString(
         json['routingMode'] as String? ?? 'global',
       ),
+      rulesProfile: _rulesProfileFromString(
+        json['rulesProfile'] as String? ?? 'global',
+      ),
       dnsMode: _dnsModeFromString(json['dnsMode'] as String? ?? 'auto'),
       systemProxyEnabled: json['systemProxyEnabled'] as bool? ?? false,
       tunEnabled: json['tunEnabled'] as bool? ?? false,
@@ -128,6 +133,7 @@ class AppConfigState {
     String? activeProfileId,
     ConnectionStateValue? connectionState,
     RoutingMode? routingMode,
+    RulesProfile? rulesProfile,
     DnsMode? dnsMode,
     bool? systemProxyEnabled,
     bool? tunEnabled,
@@ -141,6 +147,7 @@ class AppConfigState {
       activeProfileId: activeProfileId ?? this.activeProfileId,
       connectionState: connectionState ?? this.connectionState,
       routingMode: routingMode ?? this.routingMode,
+      rulesProfile: rulesProfile ?? this.rulesProfile,
       dnsMode: dnsMode ?? this.dnsMode,
       systemProxyEnabled: systemProxyEnabled ?? this.systemProxyEnabled,
       tunEnabled: tunEnabled ?? this.tunEnabled,
@@ -157,6 +164,7 @@ class AppConfigState {
       'activeProfileId': activeProfileId,
       'connectionState': connectionState.name,
       'routingMode': routingMode.name,
+      'rulesProfile': rulesProfile.name,
       'dnsMode': dnsMode.name,
       'systemProxyEnabled': systemProxyEnabled,
       'tunEnabled': tunEnabled,
@@ -328,6 +336,13 @@ RoutingMode _routingModeFromString(String value) {
   return RoutingMode.values.firstWhere(
     (item) => item.name == value,
     orElse: () => RoutingMode.global,
+  );
+}
+
+RulesProfile _rulesProfileFromString(String value) {
+  return RulesProfile.values.firstWhere(
+    (item) => item.name == value,
+    orElse: () => RulesProfile.global,
   );
 }
 

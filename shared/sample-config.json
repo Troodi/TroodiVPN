@@ -2,6 +2,7 @@
   "activeProfileId": "main-reality",
   "connectionState": "connected",
   "routingMode": "blacklist",
+  "rulesProfile": "global",
   "dnsMode": "auto",
   "systemProxyEnabled": true,
   "tunEnabled": false,

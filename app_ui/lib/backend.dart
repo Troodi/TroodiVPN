@@ -6,28 +6,38 @@ class BackendClient {
   });
 
   final String baseUrl;
+  static const Duration _stateTimeout = Duration(seconds: 10);
+  static const Duration _connectTimeout = Duration(seconds: 45);
 
   Future<DashboardSnapshot> getState() async {
-    final response = await http.get(Uri.parse('$baseUrl/api/v1/state'));
+    final response = await http
+        .get(Uri.parse('$baseUrl/api/v1/state'))
+        .timeout(_stateTimeout);
     return _decodeSnapshot(response);
   }
 
   Future<DashboardSnapshot> updateState(AppConfigState config) async {
-    final response = await http.put(
-      Uri.parse('$baseUrl/api/v1/state'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode(config.toJson()),
-    );
+    final response = await http
+        .put(
+          Uri.parse('$baseUrl/api/v1/state'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode(config.toJson()),
+        )
+        .timeout(_stateTimeout);
     return _decodeSnapshot(response);
   }
 
   Future<DashboardSnapshot> connect() async {
-    final response = await http.post(Uri.parse('$baseUrl/api/v1/connect'));
+    final response = await http
+        .post(Uri.parse('$baseUrl/api/v1/connect'))
+        .timeout(_connectTimeout);
     return _decodeSnapshot(response);
   }
 
   Future<DashboardSnapshot> disconnect() async {
-    final response = await http.post(Uri.parse('$baseUrl/api/v1/disconnect'));
+    final response = await http
+        .post(Uri.parse('$baseUrl/api/v1/disconnect'))
+        .timeout(_connectTimeout);
     return _decodeSnapshot(response);
   }
 

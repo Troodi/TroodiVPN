@@ -26,41 +26,36 @@ func BuildWithOptions(cfg config.AppConfig, opts BuildOptions) Config {
 	activeProfile := findActiveProfile(cfg)
 
 	if len(cfg.BlockedDomains) > 0 {
-		rules = append(rules, map[string]any{
-			"type":        "field",
-			"domain":      cfg.BlockedDomains,
-			"outboundTag": "block",
-		})
+		rules = appendDomainRule(rules, cfg.BlockedDomains, "block")
+	}
+
+	if len(cfg.ProxyDomains) > 0 {
+		rules = appendDomainRule(rules, cfg.ProxyDomains, "proxy")
+	}
+
+	if cfg.RulesProfile == config.RulesProfileRussia {
+		rules = appendDomainRule(rules, []string{"geosite:ru-blocked"}, "proxy")
+		rules = appendIPRule(rules, []string{"geoip:ru-blocked"}, "proxy")
+		rules = appendDomainRule(rules, []string{"geosite:private"}, "direct")
+		rules = appendIPRule(rules, []string{"geoip:private", "geoip:ru"}, "direct")
 	}
 
 	switch cfg.RoutingMode {
 	case config.RoutingWhitelist:
-		if len(cfg.ProxyDomains) > 0 {
-			rules = append(rules, map[string]any{
-				"type":        "field",
-				"domain":      cfg.ProxyDomains,
-				"outboundTag": "proxy",
-			})
-		}
 		rules = append(rules, map[string]any{
 			"type":        "field",
 			"port":        "0-65535",
 			"outboundTag": "direct",
 		})
 	case config.RoutingBlacklist:
-		if len(cfg.DirectDomains) > 0 {
-			rules = append(rules, map[string]any{
-				"type":        "field",
-				"domain":      cfg.DirectDomains,
-				"outboundTag": "direct",
-			})
-		}
+		rules = appendDomainRule(rules, cfg.DirectDomains, "direct")
 		rules = append(rules, map[string]any{
 			"type":        "field",
 			"port":        "0-65535",
 			"outboundTag": "proxy",
 		})
 	default:
+		rules = appendDomainRule(rules, cfg.DirectDomains, "direct")
 		rules = append(rules, map[string]any{
 			"type":        "field",
 			"port":        "0-65535",
@@ -83,10 +78,39 @@ func BuildWithOptions(cfg config.AppConfig, opts BuildOptions) Config {
 			{"tag": "block", "protocol": "blackhole"},
 		},
 		"routing": map[string]any{
-			"domainStrategy": "AsIs",
+			"domainStrategy": domainStrategy(cfg),
 			"rules":          rules,
 		},
 	}
+}
+
+func appendDomainRule(rules []map[string]any, domains []string, outboundTag string) []map[string]any {
+	if len(domains) == 0 {
+		return rules
+	}
+	return append(rules, map[string]any{
+		"type":        "field",
+		"domain":      domains,
+		"outboundTag": outboundTag,
+	})
+}
+
+func appendIPRule(rules []map[string]any, ips []string, outboundTag string) []map[string]any {
+	if len(ips) == 0 {
+		return rules
+	}
+	return append(rules, map[string]any{
+		"type":        "field",
+		"ip":          ips,
+		"outboundTag": outboundTag,
+	})
+}
+
+func domainStrategy(cfg config.AppConfig) string {
+	if cfg.RulesProfile == config.RulesProfileRussia {
+		return "IPIfNonMatch"
+	}
+	return "AsIs"
 }
 
 func findActiveProfile(cfg config.AppConfig) config.ServerProfile {

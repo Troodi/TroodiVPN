@@ -7,6 +7,7 @@
     "activeProfileId",
     "connectionState",
     "routingMode",
+    "rulesProfile",
     "dnsMode",
     "systemProxyEnabled",
     "tunEnabled",
@@ -27,6 +28,10 @@
     "routingMode": {
       "type": "string",
       "enum": ["global", "whitelist", "blacklist"]
+    },
+    "rulesProfile": {
+      "type": "string",
+      "enum": ["global", "russia"]
     },
     "dnsMode": {
       "type": "string",

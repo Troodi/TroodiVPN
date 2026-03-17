@@ -16,6 +16,8 @@ enum RuleType { domain, wildcard, ip, cidr }
 
 enum RuleBucket { vpn, direct, blocked }
 
+enum RulesProfile { global, russia }
+
 class AppPalette {
   static const bg0 = Color(0xFFF0F1F4);
   static const bg1 = Color(0xFFE6E7EB);

@@ -16,23 +16,21 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
-	"unsafe"
 
 	"github.com/miekg/dns"
 	"github.com/troodi/xray-desktop/core-manager/internal/config"
 	"github.com/troodi/xray-desktop/core-manager/internal/platform"
 	"github.com/troodi/xray-desktop/core-manager/internal/xray"
 	"golang.org/x/net/proxy"
-	"golang.org/x/sys/windows"
 )
 
 const maxLogLines = 200
 
-var (
-	kernel32ProcessIO        = windows.NewLazySystemDLL("kernel32.dll")
-	procGetProcessIoCounters = kernel32ProcessIO.NewProc("GetProcessIoCounters")
+const (
+	runetFreedomGeoSiteURL = "https://github.com/runetfreedom/russia-v2ray-rules-dat/releases/latest/download/geosite.dat"
+	runetFreedomGeoIPURL   = "https://github.com/runetfreedom/russia-v2ray-rules-dat/releases/latest/download/geoip.dat"
+	routingAssetsTTL       = 24 * time.Hour
 )
 
 type Status struct {
@@ -189,6 +187,10 @@ func (m *Manager) startLocked(cfg config.AppConfig) error {
 	if err := m.ensureBinaryLocked(); err != nil {
 		return err
 	}
+	assetDir, err := m.ensureRoutingAssetsLocked(cfg)
+	if err != nil {
+		return err
+	}
 	if err := m.cleanupStaleProcessesLocked(); err != nil {
 		return err
 	}
@@ -228,6 +230,7 @@ func (m *Manager) startLocked(cfg config.AppConfig) error {
 
 	cmd := exec.Command(m.binaryPath, "run", "-c", configPath)
 	cmd.Dir = filepath.Dir(m.binaryPath)
+	cmd.Env = append(os.Environ(), "xray.location.asset="+assetDir)
 	cmd.SysProcAttr = hiddenProcessAttributes()
 
 	stdout, err := cmd.StdoutPipe()
@@ -350,6 +353,100 @@ func (m *Manager) ensureBinaryLocked() error {
 		return fmt.Errorf("xray binary path points to a directory: %s", m.binaryPath)
 	}
 
+	return nil
+}
+
+func (m *Manager) ensureRoutingAssetsLocked(cfg config.AppConfig) (string, error) {
+	assetDir, err := defaultAssetDir()
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(assetDir, 0o755); err != nil {
+		return "", err
+	}
+
+	if cfg.RulesProfile != config.RulesProfileRussia {
+		return assetDir, nil
+	}
+
+	required := []struct {
+		name string
+		url  string
+	}{
+		{name: "geosite.dat", url: runetFreedomGeoSiteURL},
+		{name: "geoip.dat", url: runetFreedomGeoIPURL},
+	}
+
+	for _, asset := range required {
+		path := filepath.Join(assetDir, asset.name)
+		if isFreshFile(path, routingAssetsTTL) {
+			continue
+		}
+		if err := downloadFile(asset.url, path); err != nil {
+			if _, statErr := os.Stat(path); statErr == nil {
+				m.appendLogLocked(fmt.Sprintf("[%s] failed to refresh %s, using cached copy: %v", time.Now().Format(time.RFC3339), asset.name, err))
+				continue
+			}
+			return "", fmt.Errorf("failed to download %s: %w", asset.name, err)
+		}
+		m.appendLogLocked(fmt.Sprintf("[%s] updated routing asset %s", time.Now().Format(time.RFC3339), asset.name))
+	}
+
+	return assetDir, nil
+}
+
+func defaultAssetDir() (string, error) {
+	if cacheDir, err := os.UserCacheDir(); err == nil && cacheDir != "" {
+		return filepath.Join(cacheDir, "troodi-vpn", "xray-assets"), nil
+	}
+	if configDir, err := os.UserConfigDir(); err == nil && configDir != "" {
+		return filepath.Join(configDir, "troodi-vpn", "xray-assets"), nil
+	}
+	return filepath.Join(os.TempDir(), "troodi-vpn", "xray-assets"), nil
+}
+
+func isFreshFile(path string, ttl time.Duration) bool {
+	info, err := os.Stat(path)
+	if err != nil || info.IsDir() {
+		return false
+	}
+	return time.Since(info.ModTime()) < ttl && info.Size() > 0
+}
+
+func downloadFile(url, path string) error {
+	client := &http.Client{Timeout: 2 * time.Minute}
+	response, err := client.Get(url)
+	if err != nil {
+		return err
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return fmt.Errorf("unexpected status %s", response.Status)
+	}
+
+	tmpPath := path + ".tmp"
+	file, err := os.Create(tmpPath)
+	if err != nil {
+		return err
+	}
+
+	copyErr := func() error {
+		defer file.Close()
+		if _, err := io.Copy(file, response.Body); err != nil {
+			return err
+		}
+		return file.Sync()
+	}()
+	if copyErr != nil {
+		_ = os.Remove(tmpPath)
+		return copyErr
+	}
+
+	if err := os.Rename(tmpPath, path); err != nil {
+		_ = os.Remove(tmpPath)
+		return err
+	}
 	return nil
 }
 
@@ -703,82 +800,6 @@ func lookupExternalIP(cfg config.AppConfig) (string, error) {
 		return "", err
 	}
 	return strings.TrimSpace(payload.IP), nil
-}
-
-func (m *Manager) measureProcessIO() (uint64, uint64) {
-	m.mu.Lock()
-	cmd := m.cmd
-	lastReadBytes := m.lastReadBytes
-	lastWriteBytes := m.lastWriteBytes
-	lastMetricsAt := m.lastMetricsAt
-	m.mu.Unlock()
-
-	if cmd == nil || cmd.Process == nil || runtime.GOOS != "windows" {
-		return 0, 0
-	}
-
-	handle, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(cmd.Process.Pid))
-	if err != nil {
-		return 0, 0
-	}
-	defer windows.CloseHandle(handle)
-
-	var counters windows.IO_COUNTERS
-	if err := getProcessIoCounters(handle, &counters); err != nil {
-		return 0, 0
-	}
-
-	now := time.Now()
-	if lastMetricsAt.IsZero() {
-		m.mu.Lock()
-		m.lastReadBytes = counters.ReadTransferCount
-		m.lastWriteBytes = counters.WriteTransferCount
-		m.lastMetricsAt = now
-		m.mu.Unlock()
-		return 0, 0
-	}
-
-	elapsed := now.Sub(lastMetricsAt)
-	if elapsed <= 0 {
-		return 0, 0
-	}
-
-	seconds := elapsed.Seconds()
-	downloadBps := uint64(float64(counters.ReadTransferCount-lastReadBytes) / seconds)
-	uploadBps := uint64(float64(counters.WriteTransferCount-lastWriteBytes) / seconds)
-
-	m.mu.Lock()
-	m.lastReadBytes = counters.ReadTransferCount
-	m.lastWriteBytes = counters.WriteTransferCount
-	m.lastMetricsAt = now
-	m.mu.Unlock()
-
-	return downloadBps, uploadBps
-}
-
-func getProcessIoCounters(handle windows.Handle, counters *windows.IO_COUNTERS) error {
-	r1, _, e1 := procGetProcessIoCounters.Call(
-		uintptr(handle),
-		uintptr(unsafe.Pointer(counters)),
-	)
-	if r1 != 0 {
-		return nil
-	}
-	if e1 != windows.ERROR_SUCCESS && e1 != nil {
-		return e1
-	}
-	return errors.New("GetProcessIoCounters failed")
-}
-
-func hiddenProcessAttributes() *syscall.SysProcAttr {
-	if runtime.GOOS != "windows" {
-		return nil
-	}
-
-	return &syscall.SysProcAttr{
-		HideWindow:    true,
-		CreationFlags: windows.CREATE_NO_WINDOW,
-	}
 }
 
 func queryGoogleDNS(conn net.Conn) error {

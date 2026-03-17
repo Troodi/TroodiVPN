@@ -31,6 +31,13 @@ const (
 	DNSDirect DNSMode = "direct"
 )
 
+type RulesProfile string
+
+const (
+	RulesProfileGlobal RulesProfile = "global"
+	RulesProfileRussia RulesProfile = "russia"
+)
+
 type ProfileHealth string
 
 const (
@@ -67,6 +74,7 @@ type AppConfig struct {
 	ActiveProfileID    string          `json:"activeProfileId"`
 	ConnectionState    ConnectionState `json:"connectionState"`
 	RoutingMode        RoutingMode     `json:"routingMode"`
+	RulesProfile       RulesProfile    `json:"rulesProfile"`
 	DNSMode            DNSMode         `json:"dnsMode"`
 	SystemProxyEnabled bool            `json:"systemProxyEnabled"`
 	TUNEnabled         bool            `json:"tunEnabled"`
@@ -82,6 +90,7 @@ func DefaultAppConfig() AppConfig {
 		ActiveProfileID:    "",
 		ConnectionState:    ConnectionDisconnected,
 		RoutingMode:        RoutingGlobal,
+		RulesProfile:       RulesProfileGlobal,
 		DNSMode:            DNSAuto,
 		SystemProxyEnabled: false,
 		TUNEnabled:         true,
@@ -214,6 +223,11 @@ func normalizeConfig(cfg AppConfig) AppConfig {
 		cfg.RoutingMode != RoutingWhitelist &&
 		cfg.RoutingMode != RoutingBlacklist {
 		cfg.RoutingMode = RoutingGlobal
+	}
+
+	if cfg.RulesProfile != RulesProfileGlobal &&
+		cfg.RulesProfile != RulesProfileRussia {
+		cfg.RulesProfile = RulesProfileGlobal
 	}
 
 	if cfg.DNSMode != DNSAuto &&

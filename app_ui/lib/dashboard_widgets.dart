@@ -1320,11 +1320,15 @@ class _RoutingModeCard extends StatelessWidget {
 class _RulesModeCard extends StatelessWidget {
   const _RulesModeCard({
     required this.routingMode,
+    required this.rulesProfile,
     required this.onModeChanged,
+    required this.onProfileChanged,
   });
 
   final RoutingMode routingMode;
+  final RulesProfile rulesProfile;
   final ValueChanged<RoutingMode> onModeChanged;
+  final ValueChanged<RulesProfile> onProfileChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -1404,7 +1408,108 @@ class _RulesModeCard extends StatelessWidget {
               height: 1.45,
             ),
           ),
+          const SizedBox(height: 18),
+          Text(
+            'Traffic profile',
+            style: TextStyle(
+              color: AppPalette.homeText.withValues(alpha: 0.95),
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              _ProfileChoiceChip(
+                label: 'Global',
+                selected: rulesProfile == RulesProfile.global,
+                onTap: () => onProfileChanged(RulesProfile.global),
+              ),
+              _ProfileChoiceChip(
+                label: 'Russia',
+                selected: rulesProfile == RulesProfile.russia,
+                onTap: () => onProfileChanged(RulesProfile.russia),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.04),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+            ),
+            child: Text(
+              rulesProfile == RulesProfile.russia
+                  ? 'Russia profile: Russian destinations open directly, blocked Russian resources go through VPN, and your manual rules still apply on top.'
+                  : 'Global profile: only your current mode and manual rules are used, without a regional preset.',
+              style: TextStyle(
+                color: AppPalette.homeTextMuted.withValues(alpha: 0.82),
+                fontSize: 13,
+                height: 1.45,
+              ),
+            ),
+          ),
         ],
+      ),
+    );
+  }
+}
+
+class _ProfileChoiceChip extends StatelessWidget {
+  const _ProfileChoiceChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(999),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              gradient: selected
+                  ? LinearGradient(
+                      colors: [
+                        AppPalette.homeAccent.withValues(alpha: 0.42),
+                        AppPalette.homeAccentStrong.withValues(alpha: 0.28),
+                      ],
+                    )
+                  : null,
+              color: selected ? null : Colors.white.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(
+                color: selected
+                    ? AppPalette.homeAccent.withValues(alpha: 0.65)
+                    : Colors.white.withValues(alpha: 0.08),
+              ),
+            ),
+            child: Text(
+              label,
+              style: TextStyle(
+                color: AppPalette.homeText.withValues(alpha: 0.95),
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -2596,7 +2701,6 @@ class _DomainTestCard extends StatelessWidget {
 
 class _RulesColumnCard extends StatelessWidget {
   const _RulesColumnCard({
-    required this.bucket,
     required this.title,
     required this.subtitle,
     required this.placeholder,
@@ -2612,10 +2716,8 @@ class _RulesColumnCard extends StatelessWidget {
     required this.onToggleRule,
     required this.onDeleteRule,
     required this.onEditRule,
-    required this.onAcceptRule,
   });
 
-  final RuleBucket bucket;
   final String title;
   final String subtitle;
   final String placeholder;
@@ -2631,7 +2733,6 @@ class _RulesColumnCard extends StatelessWidget {
   final void Function(String value, bool enabled) onToggleRule;
   final Future<void> Function(String value) onDeleteRule;
   final Future<void> Function(RoutingRule rule) onEditRule;
-  final Future<void> Function(RoutingRule rule) onAcceptRule;
 
   @override
   Widget build(BuildContext context) {
@@ -2639,242 +2740,138 @@ class _RulesColumnCard extends StatelessWidget {
     final filtered = rules
         .where((rule) => rule.value.toLowerCase().contains(query))
         .toList(growable: false);
-    final enabledCount = rules.where((rule) => rule.enabled).length;
-
-    return DragTarget<RoutingRule>(
-      onWillAcceptWithDetails: (details) => details.data.bucket != bucket,
-      onAcceptWithDetails: (details) => onAcceptRule(details.data),
-      builder: (context, candidateData, rejectedData) {
-        final isActive = candidateData.isNotEmpty;
-        return SizedBox(
-          height: 710,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(28),
-              boxShadow: isActive
-                  ? [
-                      BoxShadow(
-                        color: accent.withValues(alpha: 0.18),
-                        blurRadius: 28,
-                        spreadRadius: 2,
-                      ),
-                    ]
-                  : const [],
-            ),
-            child: _RulesGlassCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          '$title (${rules.length})',
-                          style: TextStyle(
-                            color: AppPalette.homeText.withValues(alpha: 0.96),
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: accent.withValues(alpha: 0.16),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: Text(
-                          '${rules.length} rules',
-                          style: TextStyle(
-                            color: accent,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    subtitle,
+    return SizedBox(
+      height: 710,
+      child: _RulesGlassCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '$title (${rules.length})',
                     style: TextStyle(
-                      color: AppPalette.homeTextMuted.withValues(alpha: 0.84),
-                      fontSize: 13,
+                      color: AppPalette.homeText.withValues(alpha: 0.96),
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 10,
-                    ),
-                    decoration: BoxDecoration(
-                      color: isActive
-                          ? accent.withValues(alpha: 0.14)
-                          : Colors.white.withValues(alpha: 0.04),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: isActive
-                            ? accent.withValues(alpha: 0.32)
-                            : Colors.white.withValues(alpha: 0.08),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          isActive
-                              ? Icons.move_down_rounded
-                              : Icons.drag_indicator_rounded,
-                          size: 16,
-                          color: isActive
-                              ? accent
-                              : AppPalette.homeTextMuted
-                                  .withValues(alpha: 0.76),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            isActive
-                                ? 'Drop here to move the rule'
-                                : '$enabledCount active. Drag a rule here to move it.',
-                            style: TextStyle(
-                              color: isActive
-                                  ? AppPalette.homeText.withValues(alpha: 0.96)
-                                  : AppPalette.homeTextMuted.withValues(
-                                      alpha: 0.74,
-                                    ),
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
                   ),
-                  const SizedBox(height: 14),
-                  _RuleInputRow(
-                    controller: inputController,
-                    placeholder: placeholder,
-                    accent: accent,
-                    errorText: errorText,
-                    onAdd: onAdd,
+                  decoration: BoxDecoration(
+                    color: accent.withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(999),
                   ),
-                  const SizedBox(height: 10),
-                  OutlinedButton.icon(
-                    onPressed: onPaste,
-                    icon: const Icon(Icons.content_paste_rounded, size: 16),
-                    label: const Text('Paste list'),
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: searchController,
-                    onChanged: (_) => onChanged(),
+                  child: Text(
+                    '${rules.length} rules',
                     style: TextStyle(
-                      color: AppPalette.homeText.withValues(alpha: 0.94),
-                      fontSize: 13,
-                    ),
-                    decoration: InputDecoration(
-                      hintText: 'Search rules...',
-                      hintStyle: TextStyle(
-                        color: AppPalette.homeTextMuted.withValues(alpha: 0.90),
-                      ),
-                      prefixIcon: const Icon(Icons.search_rounded, size: 18),
-                      filled: true,
-                      fillColor: Colors.white.withValues(alpha: 0.06),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Supported formats',
-                    style: TextStyle(
-                      color: AppPalette.homeTextMuted.withValues(alpha: 0.78),
+                      color: accent,
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  const Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      _FormatChip(label: 'example.com'),
-                      _FormatChip(label: '*.example.com'),
-                      _FormatChip(label: '1.1.1.1'),
-                      _FormatChip(label: '192.168.0.0/24'),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  Expanded(
-                    child: filtered.isEmpty
-                        ? Center(
-                            child: Text(
-                              emptyText,
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: AppPalette.homeTextMuted.withValues(
-                                  alpha: 0.72,
-                                ),
-                                fontSize: 13,
-                              ),
-                            ),
-                          )
-                        : ListView.separated(
-                            itemCount: filtered.length,
-                            separatorBuilder: (_, __) =>
-                                const SizedBox(height: 10),
-                            itemBuilder: (context, index) {
-                              final rule = filtered[index];
-                              return LongPressDraggable<RoutingRule>(
-                                data: rule,
-                                delay: const Duration(milliseconds: 120),
-                                feedback: Material(
-                                  color: Colors.transparent,
-                                  child: SizedBox(
-                                    width: 300,
-                                    child: _RuleListItem(
-                                      rule: rule,
-                                      accent: accent,
-                                      onToggle: (_) {},
-                                      onDelete: () async {},
-                                      onEdit: () async {},
-                                      isDragPreview: true,
-                                    ),
-                                  ),
-                                ),
-                                childWhenDragging: Opacity(
-                                  opacity: 0.35,
-                                  child: _RuleListItem(
-                                    rule: rule,
-                                    accent: accent,
-                                    onToggle: (enabled) =>
-                                        onToggleRule(rule.value, enabled),
-                                    onDelete: () => onDeleteRule(rule.value),
-                                    onEdit: () => onEditRule(rule),
-                                  ),
-                                ),
-                                child: _RuleListItem(
-                                  rule: rule,
-                                  accent: accent,
-                                  onToggle: (enabled) =>
-                                      onToggleRule(rule.value, enabled),
-                                  onDelete: () => onDeleteRule(rule.value),
-                                  onEdit: () => onEditRule(rule),
-                                ),
-                              );
-                            },
-                          ),
-                  ),
-                ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              subtitle,
+              style: TextStyle(
+                color: AppPalette.homeTextMuted.withValues(alpha: 0.84),
+                fontSize: 13,
               ),
             ),
-          ),
-        );
-      },
+            const SizedBox(height: 14),
+            _RuleInputRow(
+              controller: inputController,
+              placeholder: placeholder,
+              accent: accent,
+              errorText: errorText,
+              onAdd: onAdd,
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: onPaste,
+              icon: const Icon(Icons.content_paste_rounded, size: 16),
+              label: const Text('Paste list'),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: searchController,
+              onChanged: (_) => onChanged(),
+              style: TextStyle(
+                color: AppPalette.homeText.withValues(alpha: 0.94),
+                fontSize: 13,
+              ),
+              decoration: InputDecoration(
+                hintText: 'Search rules...',
+                hintStyle: TextStyle(
+                  color: AppPalette.homeTextMuted.withValues(alpha: 0.90),
+                ),
+                prefixIcon: const Icon(Icons.search_rounded, size: 18),
+                filled: true,
+                fillColor: Colors.white.withValues(alpha: 0.06),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Supported formats',
+              style: TextStyle(
+                color: AppPalette.homeTextMuted.withValues(alpha: 0.78),
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _FormatChip(label: 'example.com'),
+                _FormatChip(label: '*.example.com'),
+                _FormatChip(label: '1.1.1.1'),
+                _FormatChip(label: '192.168.0.0/24'),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Expanded(
+              child: filtered.isEmpty
+                  ? Center(
+                      child: Text(
+                        emptyText,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: AppPalette.homeTextMuted.withValues(
+                            alpha: 0.72,
+                          ),
+                          fontSize: 13,
+                        ),
+                      ),
+                    )
+                  : ListView.separated(
+                      itemCount: filtered.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 10),
+                      itemBuilder: (context, index) {
+                        final rule = filtered[index];
+                        return _RuleListItem(
+                          rule: rule,
+                          accent: accent,
+                          onToggle: (enabled) =>
+                              onToggleRule(rule.value, enabled),
+                          onDelete: () => onDeleteRule(rule.value),
+                          onEdit: () => onEditRule(rule),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

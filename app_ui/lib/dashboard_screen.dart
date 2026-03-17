@@ -15,6 +15,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   ConnectionStateValue connection = ConnectionStateValue.disconnected;
   RoutingMode routingMode = RoutingMode.global;
+  RulesProfile rulesProfile = RulesProfile.global;
   DnsMode dnsMode = DnsMode.auto;
   bool systemProxyEnabled = true;
   bool tunEnabled = false;
@@ -200,10 +201,47 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 content,
                 if (isBusy)
-                  Positioned.fill(
-                    child: Container(
-                      color: const Color(0xFF090D1C).withValues(alpha: 0.56),
-                      child: const Center(child: CircularProgressIndicator()),
+                  Positioned(
+                    top: 22,
+                    right: 22,
+                    child: IgnorePointer(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF11172F).withValues(alpha: 0.9),
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.08),
+                          ),
+                          boxShadow: [
+                            AppShadows.darkCard,
+                          ],
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.1,
+                              ),
+                            ),
+                            SizedBox(width: 10),
+                            Text(
+                              'Applying...',
+                              style: TextStyle(
+                                color: AppPalette.homeText,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
               ],
@@ -403,6 +441,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
       setState(() {
         _applySnapshot(snapshot);
       });
+    } on TimeoutException {
+      if (!mounted) {
+        return;
+      }
+      _showMessage(
+        'Backend did not respond in time. The change may still apply shortly.',
+        isError: true,
+      );
     } catch (error) {
       if (!mounted) {
         return;
@@ -444,6 +490,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
       setState(() {
         _applySnapshot(snapshot);
       });
+    } on TimeoutException {
+      if (!mounted) {
+        return;
+      }
+      _showMessage(
+        'Connection is taking too long. Check Logs. If Xray starts, the status will update automatically.',
+        isError: true,
+      );
     } catch (error) {
       if (!mounted) {
         return;
@@ -548,6 +602,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final config = snapshot.config;
     connection = config.connectionState;
     routingMode = config.routingMode;
+    rulesProfile = config.rulesProfile;
     dnsMode = config.dnsMode;
     systemProxyEnabled = config.systemProxyEnabled;
     tunEnabled = config.tunEnabled;
@@ -573,6 +628,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       activeProfileId: activeProfileId,
       connectionState: connection,
       routingMode: routingMode,
+      rulesProfile: rulesProfile,
       dnsMode: dnsMode,
       systemProxyEnabled: systemProxyEnabled,
       tunEnabled: tunEnabled,
@@ -712,8 +768,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
         final listChildren = <Widget>[
           _RulesModeCard(
             routingMode: routingMode,
+            rulesProfile: rulesProfile,
             onModeChanged: (value) =>
                 _saveConfig(_currentConfig().copyWith(routingMode: value)),
+            onProfileChanged: (profile) async {
+              if (rulesProfile == profile) {
+                return;
+              }
+              setState(() {
+                rulesProfile = profile;
+              });
+              await _applyRulesProfile(profile);
+            },
           ).animate().fadeIn(duration: 240.ms).slideY(
                 begin: 0.05,
                 end: 0,
@@ -749,9 +815,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const SizedBox(height: 16),
         ];
 
-        final columns = [
+        final List<Widget> columns = [
           _RulesColumnCard(
-            bucket: RuleBucket.vpn,
             title: 'Via VPN',
             subtitle: 'Use VPN for these domains',
             placeholder: 'github.com',
@@ -769,10 +834,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             onDeleteRule: (value) =>
                 _removeRuleFromBucket(RuleBucket.vpn, value),
             onEditRule: (rule) => _editRule(rule),
-            onAcceptRule: (rule) => _moveRuleToBucket(rule, RuleBucket.vpn),
           ),
           _RulesColumnCard(
-            bucket: RuleBucket.direct,
             title: 'Open normally',
             subtitle: 'Bypass VPN for these domains',
             placeholder: 'bank.ru',
@@ -790,10 +853,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             onDeleteRule: (value) =>
                 _removeRuleFromBucket(RuleBucket.direct, value),
             onEditRule: (rule) => _editRule(rule),
-            onAcceptRule: (rule) => _moveRuleToBucket(rule, RuleBucket.direct),
           ),
           _RulesColumnCard(
-            bucket: RuleBucket.blocked,
             title: 'Blocked',
             subtitle: 'Drop traffic for these domains',
             placeholder: 'ads.example.com',
@@ -811,7 +872,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
             onDeleteRule: (value) =>
                 _removeRuleFromBucket(RuleBucket.blocked, value),
             onEditRule: (rule) => _editRule(rule),
-            onAcceptRule: (rule) => _moveRuleToBucket(rule, RuleBucket.blocked),
           ),
         ];
 
@@ -984,68 +1044,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         .where((item) => item != value)
         .toList(growable: false);
     await _replaceRulesForBucket(bucket, next);
-  }
-
-  Future<void> _moveRuleToBucket(
-      RoutingRule rule, RuleBucket targetBucket) async {
-    if (rule.bucket == targetBucket) {
-      return;
-    }
-
-    final vpn = List<String>.from(proxyDomains);
-    final direct = List<String>.from(directDomains);
-    final blocked = List<String>.from(blockedDomains);
-
-    List<String> source;
-    List<String> target;
-
-    switch (rule.bucket) {
-      case RuleBucket.vpn:
-        source = vpn;
-      case RuleBucket.direct:
-        source = direct;
-      case RuleBucket.blocked:
-        source = blocked;
-    }
-
-    switch (targetBucket) {
-      case RuleBucket.vpn:
-        target = vpn;
-      case RuleBucket.direct:
-        target = direct;
-      case RuleBucket.blocked:
-        target = blocked;
-    }
-
-    source.removeWhere((item) => item == rule.value);
-    if (!target.contains(rule.value)) {
-      target.insert(0, rule.value);
-    }
-
-    final sourceDisabled = _disabledRulesForBucket(rule.bucket);
-    final targetDisabled = _disabledRulesForBucket(targetBucket);
-
-    setState(() {
-      sourceDisabled.remove(rule.value);
-      if (rule.enabled) {
-        targetDisabled.remove(rule.value);
-      } else {
-        targetDisabled.add(rule.value);
-      }
-    });
-
-    await _saveConfig(
-      _currentConfig().copyWith(
-        proxyDomains: vpn,
-        directDomains: direct,
-        blockedDomains: blocked,
-      ),
-    );
-
-    if (!mounted) {
-      return;
-    }
-    _showMessage('Moved to ${_bucketTitle(targetBucket)}.');
   }
 
   Future<void> _editRule(RoutingRule rule) async {
@@ -1893,9 +1891,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _resetRules() async {
     await _saveConfig(
       _currentConfig().copyWith(
+        rulesProfile: RulesProfile.global,
         proxyDomains: const [],
         directDomains: const [],
         blockedDomains: const [],
+      ),
+    );
+  }
+
+  Future<void> _applyRulesProfile(RulesProfile profile) async {
+    await _saveConfig(
+      _currentConfig().copyWith(
+        rulesProfile: profile,
       ),
     );
   }

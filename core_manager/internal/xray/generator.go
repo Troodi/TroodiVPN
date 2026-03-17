@@ -22,45 +22,42 @@ func Build(cfg config.AppConfig) Config {
 }
 
 func BuildWithOptions(cfg config.AppConfig, opts BuildOptions) Config {
-	rules := make([]map[string]any, 0, len(cfg.ProxyDomains)+len(cfg.DirectDomains)+len(cfg.BlockedDomains)+2)
+	rules := make([]map[string]any, 0, len(cfg.ProxyDomains)+len(cfg.DirectDomains)+len(cfg.BlockedDomains)+8)
 	activeProfile := findActiveProfile(cfg)
 
 	if len(cfg.BlockedDomains) > 0 {
 		rules = appendDomainRule(rules, cfg.BlockedDomains, "block")
 	}
 
-	if len(cfg.ProxyDomains) > 0 {
-		rules = appendDomainRule(rules, cfg.ProxyDomains, "proxy")
-	}
-
 	if cfg.RulesProfile == config.RulesProfileRussia {
-		rules = appendDomainRule(rules, []string{"geosite:ru-blocked"}, "proxy")
-		rules = appendIPRule(rules, []string{"geoip:ru-blocked"}, "proxy")
-		rules = appendDomainRule(rules, []string{"geosite:private"}, "direct")
-		rules = appendIPRule(rules, []string{"geoip:private", "geoip:ru"}, "direct")
-	}
+		rules = appendRussiaSmartRules(rules, cfg)
+	} else {
+		if len(cfg.ProxyDomains) > 0 {
+			rules = appendDomainRule(rules, cfg.ProxyDomains, "proxy")
+		}
 
-	switch cfg.RoutingMode {
-	case config.RoutingWhitelist:
-		rules = append(rules, map[string]any{
-			"type":        "field",
-			"port":        "0-65535",
-			"outboundTag": "direct",
-		})
-	case config.RoutingBlacklist:
-		rules = appendDomainRule(rules, cfg.DirectDomains, "direct")
-		rules = append(rules, map[string]any{
-			"type":        "field",
-			"port":        "0-65535",
-			"outboundTag": "proxy",
-		})
-	default:
-		rules = appendDomainRule(rules, cfg.DirectDomains, "direct")
-		rules = append(rules, map[string]any{
-			"type":        "field",
-			"port":        "0-65535",
-			"outboundTag": "proxy",
-		})
+		switch cfg.RoutingMode {
+		case config.RoutingWhitelist:
+			rules = append(rules, map[string]any{
+				"type":        "field",
+				"port":        "0-65535",
+				"outboundTag": "direct",
+			})
+		case config.RoutingBlacklist:
+			rules = appendDomainRule(rules, cfg.DirectDomains, "direct")
+			rules = append(rules, map[string]any{
+				"type":        "field",
+				"port":        "0-65535",
+				"outboundTag": "proxy",
+			})
+		default:
+			rules = appendDomainRule(rules, cfg.DirectDomains, "direct")
+			rules = append(rules, map[string]any{
+				"type":        "field",
+				"port":        "0-65535",
+				"outboundTag": "proxy",
+			})
+		}
 	}
 
 	dnsServers := []string{"1.1.1.1", "8.8.8.8"}
@@ -82,6 +79,38 @@ func BuildWithOptions(cfg config.AppConfig, opts BuildOptions) Config {
 			"rules":          rules,
 		},
 	}
+}
+
+func appendRussiaSmartRules(rules []map[string]any, cfg config.AppConfig) []map[string]any {
+	// Keep local/private destinations outside the tunnel even when TUN or
+	// system proxy is enabled, so LAN traffic does not loop through Xray.
+	rules = appendIPRule(rules, []string{"geoip:private"}, "direct")
+
+	if len(cfg.ProxyDomains) > 0 {
+		rules = appendDomainRule(rules, cfg.ProxyDomains, "proxy")
+	}
+
+	// Smart Russia routing order:
+	// 1. Resources blocked in Russia -> proxy
+	// 2. Resources available only from inside Russia -> direct
+	// 3. Other Russian traffic -> direct
+	// 4. Everything else -> proxy
+	rules = appendDomainRule(rules, []string{"geosite:ru-blocked"}, "proxy")
+	rules = appendIPRule(rules, []string{"geoip:ru-blocked"}, "proxy")
+
+	if len(cfg.DirectDomains) > 0 {
+		rules = appendDomainRule(rules, cfg.DirectDomains, "direct")
+	}
+
+	rules = appendDomainRule(rules, []string{"geosite:ru-available-only-inside"}, "direct")
+	rules = appendDomainRule(rules, []string{"regexp:(^|\\.).*\\.ru$", "regexp:(^|\\.).*\\.xn--p1ai$"}, "direct")
+	rules = appendIPRule(rules, []string{"ext:geoip-ls.dat:ru"}, "direct")
+
+	return append(rules, map[string]any{
+		"type":        "field",
+		"port":        "0-65535",
+		"outboundTag": "proxy",
+	})
 }
 
 func appendDomainRule(rules []map[string]any, domains []string, outboundTag string) []map[string]any {

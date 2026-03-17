@@ -1428,7 +1428,7 @@ class _RulesModeCard extends StatelessWidget {
                 onTap: () => onProfileChanged(RulesProfile.global),
               ),
               _ProfileChoiceChip(
-                label: 'Russia',
+                label: 'Russia (Smart)',
                 selected: rulesProfile == RulesProfile.russia,
                 onTap: () => onProfileChanged(RulesProfile.russia),
               ),
@@ -1445,7 +1445,7 @@ class _RulesModeCard extends StatelessWidget {
             ),
             child: Text(
               rulesProfile == RulesProfile.russia
-                  ? 'Russia profile: Russian destinations open directly, blocked Russian resources go through VPN, and your manual rules still apply on top.'
+                  ? 'Russia (Smart): resources blocked in Russia go through VPN, Russian and Russia-only destinations open directly, local/private IPs stay direct, and your manual rules still apply on top.'
                   : 'Global profile: only your current mode and manual rules are used, without a regional preset.',
               style: TextStyle(
                 color: AppPalette.homeTextMuted.withValues(alpha: 0.82),

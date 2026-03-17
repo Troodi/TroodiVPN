@@ -23,6 +23,11 @@ func main() {
 		log.Printf("config path not resolved (%v), using in-memory store", err)
 	}
 	runtime := xruntime.NewManager(xruntime.DefaultBinaryPath())
+	go func() {
+		if err := runtime.WarmRoutingAssets(); err != nil {
+			log.Printf("routing assets warmup failed: %v", err)
+		}
+	}()
 	handler := api.NewServer(store, runtime)
 
 	server := &http.Server{

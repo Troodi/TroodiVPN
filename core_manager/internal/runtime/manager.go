@@ -28,8 +28,10 @@ import (
 const maxLogLines = 200
 
 const (
-	runetFreedomGeoSiteURL = "https://github.com/runetfreedom/russia-v2ray-rules-dat/releases/latest/download/geosite.dat"
-	runetFreedomGeoIPURL   = "https://github.com/runetfreedom/russia-v2ray-rules-dat/releases/latest/download/geoip.dat"
+	runetFreedomGeoSiteURL = "https://raw.githubusercontent.com/runetfreedom/russia-v2ray-rules-dat/release/geosite.dat"
+	runetFreedomGeoIPURL   = "https://raw.githubusercontent.com/runetfreedom/russia-v2ray-rules-dat/release/geoip.dat"
+	loyalSoldierGeoSiteURL = "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat"
+	loyalSoldierGeoIPURL   = "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat"
 	routingAssetsTTL       = 24 * time.Hour
 )
 
@@ -76,6 +78,14 @@ type Manager struct {
 
 func NewManager(binaryPath string) *Manager {
 	return &Manager{binaryPath: binaryPath}
+}
+
+func (m *Manager) WarmRoutingAssets() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	_, err := m.ensureRoutingAssetsLockedInternal(true, false)
+	return err
 }
 
 func DefaultBinaryPath() string {
@@ -357,6 +367,10 @@ func (m *Manager) ensureBinaryLocked() error {
 }
 
 func (m *Manager) ensureRoutingAssetsLocked(cfg config.AppConfig) (string, error) {
+	return m.ensureRoutingAssetsLockedInternal(cfg.RulesProfile == config.RulesProfileRussia, false)
+}
+
+func (m *Manager) ensureRoutingAssetsLockedInternal(enabled bool, force bool) (string, error) {
 	assetDir, err := defaultAssetDir()
 	if err != nil {
 		return "", err
@@ -365,7 +379,7 @@ func (m *Manager) ensureRoutingAssetsLocked(cfg config.AppConfig) (string, error
 		return "", err
 	}
 
-	if cfg.RulesProfile != config.RulesProfileRussia {
+	if !enabled {
 		return assetDir, nil
 	}
 
@@ -375,11 +389,13 @@ func (m *Manager) ensureRoutingAssetsLocked(cfg config.AppConfig) (string, error
 	}{
 		{name: "geosite.dat", url: runetFreedomGeoSiteURL},
 		{name: "geoip.dat", url: runetFreedomGeoIPURL},
+		{name: "geosite-ls.dat", url: loyalSoldierGeoSiteURL},
+		{name: "geoip-ls.dat", url: loyalSoldierGeoIPURL},
 	}
 
 	for _, asset := range required {
 		path := filepath.Join(assetDir, asset.name)
-		if isFreshFile(path, routingAssetsTTL) {
+		if !force && isFreshFile(path, routingAssetsTTL) {
 			continue
 		}
 		if err := downloadFile(asset.url, path); err != nil {
@@ -390,6 +406,10 @@ func (m *Manager) ensureRoutingAssetsLocked(cfg config.AppConfig) (string, error
 			return "", fmt.Errorf("failed to download %s: %w", asset.name, err)
 		}
 		m.appendLogLocked(fmt.Sprintf("[%s] updated routing asset %s", time.Now().Format(time.RFC3339), asset.name))
+	}
+
+	if err := copyRoutingAssetsToBinaryDir(assetDir, filepath.Dir(m.binaryPath), required); err != nil {
+		return "", err
 	}
 
 	return assetDir, nil
@@ -448,6 +468,59 @@ func downloadFile(url, path string) error {
 		return err
 	}
 	return nil
+}
+
+func copyRoutingAssetsToBinaryDir(assetDir, binaryDir string, assets []struct {
+	name string
+	url  string
+}) error {
+	if binaryDir == "" {
+		return nil
+	}
+
+	for _, asset := range assets {
+		source := filepath.Join(assetDir, asset.name)
+		destination := filepath.Join(binaryDir, asset.name)
+		if err := copyFileIfChanged(source, destination); err != nil {
+			return fmt.Errorf("failed to sync %s next to xray.exe: %w", asset.name, err)
+		}
+	}
+
+	return nil
+}
+
+func copyFileIfChanged(source, destination string) error {
+	sourceInfo, err := os.Stat(source)
+	if err != nil {
+		return err
+	}
+
+	if destInfo, err := os.Stat(destination); err == nil {
+		if destInfo.Size() == sourceInfo.Size() && !sourceInfo.ModTime().After(destInfo.ModTime()) {
+			return nil
+		}
+	}
+
+	input, err := os.Open(source)
+	if err != nil {
+		return err
+	}
+	defer input.Close()
+
+	output, err := os.Create(destination)
+	if err != nil {
+		return err
+	}
+
+	if _, err := io.Copy(output, input); err != nil {
+		output.Close()
+		return err
+	}
+	if err := output.Close(); err != nil {
+		return err
+	}
+
+	return os.Chtimes(destination, time.Now(), sourceInfo.ModTime())
 }
 
 func (m *Manager) writeConfigLocked(cfg config.AppConfig, options xray.BuildOptions) (string, error) {

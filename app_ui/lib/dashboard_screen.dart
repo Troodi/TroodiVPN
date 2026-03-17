@@ -2025,6 +2025,39 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return (network & mask) == (_ipv4ToInt(ip) & mask);
   }
 
+  bool _isPrivateIpValue(String value) {
+    if (!_isValidIpv4(value)) {
+      return false;
+    }
+
+    const privateCidrs = <String>[
+      '10.0.0.0/8',
+      '172.16.0.0/12',
+      '192.168.0.0/16',
+      '127.0.0.0/8',
+      '169.254.0.0/16',
+    ];
+
+    for (final cidr in privateCidrs) {
+      if (_cidrContains(cidr, value)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  bool _isLikelyRussianRoute(String value) {
+    final normalized = value.toLowerCase();
+    if (normalized == 'localhost') {
+      return true;
+    }
+    if (_isValidIpv4(normalized)) {
+      return false;
+    }
+    return normalized.endsWith('.ru') || normalized.endsWith('.xn--p1ai');
+  }
+
   _RuleTestResult _testRule(String raw) {
     final value = _normalizeRuleValue(raw);
     if (value.isEmpty) {
@@ -2086,6 +2119,42 @@ class _DashboardScreenState extends State<DashboardScreen> {
           defaultBehavior: '',
         );
       }
+    }
+
+    if (rulesProfile == RulesProfile.russia) {
+      if (_isPrivateIpValue(value)) {
+        return _RuleTestResult(
+          input: value,
+          destination: 'Open normally',
+          matchedRule: 'geoip:private',
+          accent: const Color(0xFF8EA2FF),
+          hasMatch: true,
+          typeLabel: 'IP',
+          defaultBehavior: '',
+        );
+      }
+
+      if (_isLikelyRussianRoute(value)) {
+        return _RuleTestResult(
+          input: value,
+          destination: 'Open normally',
+          matchedRule: 'geosite:ru / geoip:ru',
+          accent: const Color(0xFF8EA2FF),
+          hasMatch: true,
+          typeLabel: _detectRuleType(value)?.name.toUpperCase() ?? 'DOMAIN',
+          defaultBehavior: '',
+        );
+      }
+
+      return _RuleTestResult(
+        input: value,
+        destination: 'Via VPN',
+        matchedRule: '',
+        accent: const Color(0xFF6BD7AE),
+        hasMatch: false,
+        typeLabel: '',
+        defaultBehavior: 'Russia Smart default',
+      );
     }
 
     if (routingMode == RoutingMode.blacklist ||

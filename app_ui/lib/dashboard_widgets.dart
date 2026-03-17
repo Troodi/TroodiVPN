@@ -1332,51 +1332,68 @@ class _RulesModeCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Routing mode',
-            style: TextStyle(
-              color: AppPalette.homeText.withValues(alpha: 0.96),
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: AppPalette.homeAccent.withValues(alpha: 0.18),
-              borderRadius: BorderRadius.circular(999),
-            ),
-            child: Text(
-              'Active mode',
-              style: TextStyle(
-                color: AppPalette.homeText.withValues(alpha: 0.94),
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
+          Row(
             children: [
-              _ModeChoiceChip(
-                label: 'Protect all traffic',
-                selected: routingMode == RoutingMode.global,
-                onTap: () => onModeChanged(RoutingMode.global),
+              Expanded(
+                child: Text(
+                  'Routing mode',
+                  style: TextStyle(
+                    color: AppPalette.homeText.withValues(alpha: 0.96),
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
               ),
-              _ModeChoiceChip(
-                label: 'Only selected sites',
-                selected: routingMode == RoutingMode.whitelist,
-                onTap: () => onModeChanged(RoutingMode.whitelist),
-              ),
-              _ModeChoiceChip(
-                label: 'Exclude sites',
-                selected: routingMode == RoutingMode.blacklist,
-                onTap: () => onModeChanged(RoutingMode.blacklist),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppPalette.homeAccent.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.08),
+                  ),
+                ),
+                child: Text(
+                  'Active mode',
+                  style: TextStyle(
+                    color: AppPalette.homeText.withValues(alpha: 0.94),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
               ),
             ],
+          ),
+          const SizedBox(height: 14),
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.04),
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+            ),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _ModeChoiceChip(
+                  label: 'Protect all traffic',
+                  selected: routingMode == RoutingMode.global,
+                  onTap: () => onModeChanged(RoutingMode.global),
+                ),
+                _ModeChoiceChip(
+                  label: 'Only selected sites',
+                  selected: routingMode == RoutingMode.whitelist,
+                  onTap: () => onModeChanged(RoutingMode.whitelist),
+                ),
+                _ModeChoiceChip(
+                  label: 'Exclude sites',
+                  selected: routingMode == RoutingMode.blacklist,
+                  onTap: () => onModeChanged(RoutingMode.blacklist),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 14),
           Text(
@@ -1717,6 +1734,60 @@ class _RulesQuickActionsCard extends StatelessWidget {
   }
 }
 
+class _QuickActionsCard extends StatelessWidget {
+  const _QuickActionsCard({
+    required this.onReset,
+    required this.onRestoreRecommended,
+  });
+
+  final Future<void> Function() onReset;
+  final Future<void> Function() onRestoreRecommended;
+
+  @override
+  Widget build(BuildContext context) {
+    return _RulesGlassCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Quick actions',
+            style: TextStyle(
+              color: AppPalette.homeText.withValues(alpha: 0.96),
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Restore a safe starting point or clear all lists and rebuild them from scratch.',
+            style: TextStyle(
+              color: AppPalette.homeTextMuted.withValues(alpha: 0.82),
+              height: 1.45,
+            ),
+          ),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              OutlinedButton.icon(
+                onPressed: onReset,
+                icon: const Icon(Icons.restart_alt_rounded),
+                label: const Text('Reset rules'),
+              ),
+              FilledButton.icon(
+                onPressed: onRestoreRecommended,
+                icon: const Icon(Icons.auto_fix_high_rounded),
+                label: const Text('Restore recommended rules'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _RulesGlassCard extends StatelessWidget {
   const _RulesGlassCard({required this.child});
 
@@ -1867,6 +1938,8 @@ class _RuleTestResult {
     required this.matchedRule,
     required this.accent,
     required this.hasMatch,
+    required this.typeLabel,
+    required this.defaultBehavior,
   });
 
   const _RuleTestResult.empty()
@@ -1874,13 +1947,17 @@ class _RuleTestResult {
         destination = '',
         matchedRule = '',
         accent = Colors.transparent,
-        hasMatch = false;
+        hasMatch = false,
+        typeLabel = '',
+        defaultBehavior = '';
 
   final String input;
   final String destination;
   final String matchedRule;
   final Color accent;
   final bool hasMatch;
+  final String typeLabel;
+  final String defaultBehavior;
 
   bool get isEmpty => input.isEmpty;
 }
@@ -1888,12 +1965,1681 @@ class _RuleTestResult {
 String _modeExplanation(RoutingMode mode) {
   switch (mode) {
     case RoutingMode.global:
-      return 'All traffic goes through VPN except domains listed in Open normally.';
+      return 'All traffic goes through VPN except sites listed in Open normally.';
     case RoutingMode.whitelist:
-      return 'Only domains from Via VPN use the VPN. Everything else opens normally.';
+      return 'Only sites listed in Via VPN use the VPN tunnel.';
     case RoutingMode.blacklist:
-      return 'All traffic goes through VPN except domains listed in Open normally.';
+      return 'All traffic goes through VPN except selected exclusions.';
   }
+}
+
+class _TrafficBehaviorCard extends StatelessWidget {
+  const _TrafficBehaviorCard({
+    required this.routingMode,
+    required this.vpnCount,
+    required this.directCount,
+    required this.blockedCount,
+    required this.onViewDetails,
+  });
+
+  final RoutingMode routingMode;
+  final int vpnCount;
+  final int directCount;
+  final int blockedCount;
+  final VoidCallback onViewDetails;
+
+  @override
+  Widget build(BuildContext context) {
+    final stats = _behaviorStats(
+      routingMode: routingMode,
+      vpnCount: vpnCount,
+      directCount: directCount,
+      blockedCount: blockedCount,
+    );
+
+    return _RulesGlassCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Traffic behavior',
+                      style: TextStyle(
+                        color: AppPalette.homeText.withValues(alpha: 0.96),
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      _behaviorHeadline(routingMode),
+                      style: TextStyle(
+                        color: AppPalette.homeText.withValues(alpha: 0.92),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              FilledButton.tonalIcon(
+                onPressed: onViewDetails,
+                icon: const Icon(Icons.account_tree_outlined, size: 16),
+                label: const Text('View details'),
+                style: FilledButton.styleFrom(
+                  backgroundColor:
+                      AppPalette.homeAccent.withValues(alpha: 0.16),
+                  foregroundColor: AppPalette.homeText,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Divider(
+            color: Colors.white.withValues(alpha: 0.08),
+            height: 1,
+          ),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: stats,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RoutingDetailsDialog extends StatelessWidget {
+  const _RoutingDetailsDialog({
+    required this.routingMode,
+    required this.vpnRules,
+    required this.directRules,
+    required this.blockedRules,
+  });
+
+  final RoutingMode routingMode;
+  final List<RoutingRule> vpnRules;
+  final List<RoutingRule> directRules;
+  final List<RoutingRule> blockedRules;
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.all(24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 980),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: const Color(0xFF151A30),
+            borderRadius: BorderRadius.circular(30),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+            boxShadow: [AppShadows.darkCard],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Traffic behavior details',
+                          style: TextStyle(
+                            color: AppPalette.homeText.withValues(alpha: 0.96),
+                            fontSize: 22,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          _modeExplanation(routingMode),
+                          style: TextStyle(
+                            color: AppPalette.homeTextMuted
+                                .withValues(alpha: 0.84),
+                            height: 1.45,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 22),
+              _RoutingDiagram(
+                routingMode: routingMode,
+                vpnRules: vpnRules,
+                directRules: directRules,
+                blockedRules: blockedRules,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RoutingDiagram extends StatelessWidget {
+  const _RoutingDiagram({
+    required this.routingMode,
+    required this.vpnRules,
+    required this.directRules,
+    required this.blockedRules,
+  });
+
+  final RoutingMode routingMode;
+  final List<RoutingRule> vpnRules;
+  final List<RoutingRule> directRules;
+  final List<RoutingRule> blockedRules;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasBlocked = blockedRules.isNotEmpty;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        return SizedBox(
+          height: hasBlocked ? 430 : 390,
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: CustomPaint(
+                  painter: _RoutingLinePainter(hasBlocked: hasBlocked),
+                ),
+              ),
+              Align(
+                alignment: const Alignment(0, -0.90),
+                child: _RoutingNode(
+                  title: 'Internet',
+                  subtitle: 'Incoming traffic',
+                  accent: const Color(0xFF7AD4FF),
+                  icon: Icons.public_rounded,
+                  compact: true,
+                ),
+              ),
+              Align(
+                alignment: const Alignment(0, -0.34),
+                child: _RoutingNode(
+                  title: 'Troodi VPN',
+                  subtitle: _modeLabel(routingMode),
+                  accent: AppPalette.homeAccent,
+                  icon: Icons.hub_rounded,
+                ),
+              ),
+              Positioned(
+                left: 0,
+                bottom: 8,
+                width: hasBlocked ? width * 0.31 : width * 0.42,
+                child: _RoutingBranch(
+                  title: 'Open normally',
+                  subtitle: routingMode == RoutingMode.whitelist
+                      ? 'Everything else bypasses VPN'
+                      : 'Selected exclusions bypass VPN',
+                  accent: const Color(0xFF97A8FF),
+                  icon: Icons.open_in_browser_rounded,
+                  rules: directRules,
+                  emptyLabel: routingMode == RoutingMode.whitelist
+                      ? 'All other traffic'
+                      : 'No direct exclusions',
+                ),
+              ),
+              Positioned(
+                left: hasBlocked ? width * 0.345 : width * 0.48,
+                bottom: 8,
+                width: hasBlocked ? width * 0.31 : width * 0.42,
+                child: _RoutingBranch(
+                  title: 'VPN tunnel',
+                  subtitle: routingMode == RoutingMode.whitelist
+                      ? 'Only selected rules use VPN'
+                      : 'All remaining traffic uses VPN',
+                  accent: const Color(0xFF6BD7AE),
+                  icon: Icons.shield_rounded,
+                  rules: vpnRules,
+                  emptyLabel: routingMode == RoutingMode.whitelist
+                      ? 'No selected sites yet'
+                      : 'All remaining traffic',
+                ),
+              ),
+              if (hasBlocked)
+                Positioned(
+                  right: 0,
+                  bottom: 8,
+                  width: width * 0.31,
+                  child: _RoutingBranch(
+                    title: 'Blocked',
+                    subtitle: 'Traffic is dropped',
+                    accent: const Color(0xFFFF9E8B),
+                    icon: Icons.block_rounded,
+                    rules: blockedRules,
+                    emptyLabel: 'No blocked rules',
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _RoutingNode extends StatelessWidget {
+  const _RoutingNode({
+    required this.title,
+    required this.subtitle,
+    required this.accent,
+    required this.icon,
+    this.compact = false,
+  });
+
+  final String title;
+  final String subtitle;
+  final Color accent;
+  final IconData icon;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: BoxConstraints(
+        minWidth: compact ? 180 : 230,
+        maxWidth: compact ? 220 : 260,
+      ),
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 16 : 18,
+        vertical: compact ? 12 : 16,
+      ),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.white.withValues(alpha: 0.12),
+            Colors.white.withValues(alpha: 0.06),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(compact ? 20 : 24),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: compact ? 34 : 40,
+            height: compact ? 34 : 40,
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: 0.18),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: accent, size: compact ? 18 : 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    color: AppPalette.homeText.withValues(alpha: 0.96),
+                    fontSize: compact ? 14 : 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    color: AppPalette.homeTextMuted.withValues(alpha: 0.84),
+                    fontSize: compact ? 11 : 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RoutingBranch extends StatelessWidget {
+  const _RoutingBranch({
+    required this.title,
+    required this.subtitle,
+    required this.accent,
+    required this.icon,
+    required this.rules,
+    required this.emptyLabel,
+  });
+
+  final String title;
+  final String subtitle;
+  final Color accent;
+  final IconData icon;
+  final List<RoutingRule> rules;
+  final String emptyLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: accent, size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    color: AppPalette.homeText.withValues(alpha: 0.96),
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            subtitle,
+            style: TextStyle(
+              color: AppPalette.homeTextMuted.withValues(alpha: 0.82),
+              height: 1.4,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 12),
+          rules.isEmpty
+              ? Text(
+                  emptyLabel,
+                  style: TextStyle(
+                    color: AppPalette.homeTextMuted.withValues(alpha: 0.72),
+                    fontSize: 12,
+                  ),
+                )
+              : Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _previewRuleChips(rules, accent),
+                ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RoutingLinePainter extends CustomPainter {
+  const _RoutingLinePainter({required this.hasBlocked});
+
+  final bool hasBlocked;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final subtle = Paint()
+      ..color = Colors.white.withValues(alpha: 0.08)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+    final vpn = Paint()
+      ..color = const Color(0xFF6BD7AE).withValues(alpha: 0.34)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2;
+    final direct = Paint()
+      ..color = const Color(0xFF97A8FF).withValues(alpha: 0.24)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2;
+    final blocked = Paint()
+      ..color = const Color(0xFFFF9E8B).withValues(alpha: 0.24)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2;
+
+    final top = Offset(size.width * 0.5, size.height * 0.12);
+    final center = Offset(size.width * 0.5, size.height * 0.32);
+    final left = Offset(size.width * 0.2, size.height * 0.78);
+    final mid = Offset(
+      hasBlocked ? size.width * 0.5 : size.width * 0.78,
+      size.height * 0.78,
+    );
+
+    canvas.drawLine(top, center, subtle);
+
+    final leftPath = Path()
+      ..moveTo(center.dx, center.dy)
+      ..quadraticBezierTo(
+          size.width * 0.38, size.height * 0.50, left.dx, left.dy);
+    canvas.drawPath(leftPath, direct);
+
+    final midPath = Path()
+      ..moveTo(center.dx, center.dy)
+      ..quadraticBezierTo(
+          size.width * 0.54, size.height * 0.50, mid.dx, mid.dy);
+    canvas.drawPath(midPath, vpn);
+
+    if (hasBlocked) {
+      final right = Offset(size.width * 0.8, size.height * 0.80);
+      final rightPath = Path()
+        ..moveTo(center.dx, center.dy)
+        ..quadraticBezierTo(
+          size.width * 0.66,
+          size.height * 0.50,
+          right.dx,
+          right.dy,
+        );
+      canvas.drawPath(rightPath, blocked);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _RoutingLinePainter oldDelegate) {
+    return oldDelegate.hasBlocked != hasBlocked;
+  }
+}
+
+class _DomainTestCard extends StatelessWidget {
+  const _DomainTestCard({
+    required this.controller,
+    required this.result,
+    required this.onChanged,
+  });
+
+  final TextEditingController controller;
+  final _RuleTestResult result;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return _RulesGlassCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Test domain / IP',
+            style: TextStyle(
+              color: AppPalette.homeText.withValues(alpha: 0.96),
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: controller,
+                  onChanged: (_) => onChanged(),
+                  style: TextStyle(
+                    color: AppPalette.homeText.withValues(alpha: 0.94),
+                    fontSize: 14,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: 'Enter domain or IP',
+                    hintStyle: TextStyle(
+                      color: AppPalette.homeTextMuted.withValues(alpha: 0.90),
+                    ),
+                    filled: true,
+                    fillColor: Colors.white.withValues(alpha: 0.08),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              FilledButton(
+                onPressed: onChanged,
+                child: const Text('Test'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  result.isEmpty
+                      ? Colors.white.withValues(alpha: 0.06)
+                      : result.accent.withValues(alpha: 0.16),
+                  Colors.white.withValues(alpha: 0.03),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: result.isEmpty
+                    ? Colors.white.withValues(alpha: 0.08)
+                    : result.accent.withValues(alpha: 0.26),
+              ),
+            ),
+            child: result.isEmpty
+                ? Text(
+                    'Result will appear here after testing.',
+                    style: TextStyle(
+                      color: AppPalette.homeTextMuted.withValues(alpha: 0.72),
+                      fontSize: 13,
+                    ),
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        result.destination,
+                        style: TextStyle(
+                          color: result.accent,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          _InlineInfoChip(
+                            label: result.input,
+                            accent: result.accent,
+                          ),
+                          if (result.typeLabel.isNotEmpty)
+                            _InlineInfoChip(
+                              label: result.typeLabel,
+                              accent: result.accent,
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      _ResultRow(
+                        label: 'Matched rule',
+                        value: result.hasMatch
+                            ? result.matchedRule
+                            : 'No matching rules',
+                      ),
+                      if (!result.hasMatch &&
+                          result.defaultBehavior.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        _ResultRow(
+                          label: 'Default behavior',
+                          value: result.defaultBehavior,
+                        ),
+                      ],
+                    ],
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RulesColumnCard extends StatelessWidget {
+  const _RulesColumnCard({
+    required this.bucket,
+    required this.title,
+    required this.subtitle,
+    required this.placeholder,
+    required this.accent,
+    required this.rules,
+    required this.errorText,
+    required this.searchController,
+    required this.inputController,
+    required this.emptyText,
+    required this.onChanged,
+    required this.onAdd,
+    required this.onPaste,
+    required this.onToggleRule,
+    required this.onDeleteRule,
+    required this.onEditRule,
+    required this.onAcceptRule,
+  });
+
+  final RuleBucket bucket;
+  final String title;
+  final String subtitle;
+  final String placeholder;
+  final Color accent;
+  final List<RoutingRule> rules;
+  final String? errorText;
+  final TextEditingController searchController;
+  final TextEditingController inputController;
+  final String emptyText;
+  final VoidCallback onChanged;
+  final Future<void> Function() onAdd;
+  final Future<void> Function() onPaste;
+  final void Function(String value, bool enabled) onToggleRule;
+  final Future<void> Function(String value) onDeleteRule;
+  final Future<void> Function(RoutingRule rule) onEditRule;
+  final Future<void> Function(RoutingRule rule) onAcceptRule;
+
+  @override
+  Widget build(BuildContext context) {
+    final query = searchController.text.trim().toLowerCase();
+    final filtered = rules
+        .where((rule) => rule.value.toLowerCase().contains(query))
+        .toList(growable: false);
+    final enabledCount = rules.where((rule) => rule.enabled).length;
+
+    return DragTarget<RoutingRule>(
+      onWillAcceptWithDetails: (details) => details.data.bucket != bucket,
+      onAcceptWithDetails: (details) => onAcceptRule(details.data),
+      builder: (context, candidateData, rejectedData) {
+        final isActive = candidateData.isNotEmpty;
+        return SizedBox(
+          height: 710,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(28),
+              boxShadow: isActive
+                  ? [
+                      BoxShadow(
+                        color: accent.withValues(alpha: 0.18),
+                        blurRadius: 28,
+                        spreadRadius: 2,
+                      ),
+                    ]
+                  : const [],
+            ),
+            child: _RulesGlassCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '$title (${rules.length})',
+                          style: TextStyle(
+                            color: AppPalette.homeText.withValues(alpha: 0.96),
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: accent.withValues(alpha: 0.16),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          '${rules.length} rules',
+                          style: TextStyle(
+                            color: accent,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      color: AppPalette.homeTextMuted.withValues(alpha: 0.84),
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isActive
+                          ? accent.withValues(alpha: 0.14)
+                          : Colors.white.withValues(alpha: 0.04),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: isActive
+                            ? accent.withValues(alpha: 0.32)
+                            : Colors.white.withValues(alpha: 0.08),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          isActive
+                              ? Icons.move_down_rounded
+                              : Icons.drag_indicator_rounded,
+                          size: 16,
+                          color: isActive
+                              ? accent
+                              : AppPalette.homeTextMuted
+                                  .withValues(alpha: 0.76),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            isActive
+                                ? 'Drop here to move the rule'
+                                : '$enabledCount active. Drag a rule here to move it.',
+                            style: TextStyle(
+                              color: isActive
+                                  ? AppPalette.homeText.withValues(alpha: 0.96)
+                                  : AppPalette.homeTextMuted.withValues(
+                                      alpha: 0.74,
+                                    ),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  _RuleInputRow(
+                    controller: inputController,
+                    placeholder: placeholder,
+                    accent: accent,
+                    errorText: errorText,
+                    onAdd: onAdd,
+                  ),
+                  const SizedBox(height: 10),
+                  OutlinedButton.icon(
+                    onPressed: onPaste,
+                    icon: const Icon(Icons.content_paste_rounded, size: 16),
+                    label: const Text('Paste list'),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: searchController,
+                    onChanged: (_) => onChanged(),
+                    style: TextStyle(
+                      color: AppPalette.homeText.withValues(alpha: 0.94),
+                      fontSize: 13,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: 'Search rules...',
+                      hintStyle: TextStyle(
+                        color: AppPalette.homeTextMuted.withValues(alpha: 0.90),
+                      ),
+                      prefixIcon: const Icon(Icons.search_rounded, size: 18),
+                      filled: true,
+                      fillColor: Colors.white.withValues(alpha: 0.06),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Supported formats',
+                    style: TextStyle(
+                      color: AppPalette.homeTextMuted.withValues(alpha: 0.78),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _FormatChip(label: 'example.com'),
+                      _FormatChip(label: '*.example.com'),
+                      _FormatChip(label: '1.1.1.1'),
+                      _FormatChip(label: '192.168.0.0/24'),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  Expanded(
+                    child: filtered.isEmpty
+                        ? Center(
+                            child: Text(
+                              emptyText,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: AppPalette.homeTextMuted.withValues(
+                                  alpha: 0.72,
+                                ),
+                                fontSize: 13,
+                              ),
+                            ),
+                          )
+                        : ListView.separated(
+                            itemCount: filtered.length,
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: 10),
+                            itemBuilder: (context, index) {
+                              final rule = filtered[index];
+                              return LongPressDraggable<RoutingRule>(
+                                data: rule,
+                                delay: const Duration(milliseconds: 120),
+                                feedback: Material(
+                                  color: Colors.transparent,
+                                  child: SizedBox(
+                                    width: 300,
+                                    child: _RuleListItem(
+                                      rule: rule,
+                                      accent: accent,
+                                      onToggle: (_) {},
+                                      onDelete: () async {},
+                                      onEdit: () async {},
+                                      isDragPreview: true,
+                                    ),
+                                  ),
+                                ),
+                                childWhenDragging: Opacity(
+                                  opacity: 0.35,
+                                  child: _RuleListItem(
+                                    rule: rule,
+                                    accent: accent,
+                                    onToggle: (enabled) =>
+                                        onToggleRule(rule.value, enabled),
+                                    onDelete: () => onDeleteRule(rule.value),
+                                    onEdit: () => onEditRule(rule),
+                                  ),
+                                ),
+                                child: _RuleListItem(
+                                  rule: rule,
+                                  accent: accent,
+                                  onToggle: (enabled) =>
+                                      onToggleRule(rule.value, enabled),
+                                  onDelete: () => onDeleteRule(rule.value),
+                                  onEdit: () => onEditRule(rule),
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _RuleInputRow extends StatelessWidget {
+  const _RuleInputRow({
+    required this.controller,
+    required this.placeholder,
+    required this.accent,
+    required this.errorText,
+    required this.onAdd,
+  });
+
+  final TextEditingController controller;
+  final String placeholder;
+  final Color accent;
+  final String? errorText;
+  final Future<void> Function() onAdd;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: controller,
+                onSubmitted: (_) => onAdd(),
+                style: TextStyle(
+                  color: AppPalette.homeText.withValues(alpha: 0.94),
+                  fontSize: 13,
+                ),
+                decoration: InputDecoration(
+                  hintText: placeholder,
+                  hintStyle: TextStyle(
+                    color: AppPalette.homeTextMuted.withValues(alpha: 0.90),
+                  ),
+                  filled: true,
+                  fillColor: Colors.white.withValues(alpha: 0.08),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            FilledButton.icon(
+              onPressed: onAdd,
+              icon: const Icon(Icons.add_rounded, size: 16),
+              label: const Text('Add'),
+              style: AppUi.primaryButton(accent),
+            ),
+          ],
+        ),
+        if (errorText != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            errorText!,
+            style: const TextStyle(
+              color: Color(0xFFFF9E8B),
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _RuleListItem extends StatelessWidget {
+  const _RuleListItem({
+    required this.rule,
+    required this.accent,
+    required this.onToggle,
+    required this.onDelete,
+    required this.onEdit,
+    this.isDragPreview = false,
+  });
+
+  final RoutingRule rule;
+  final Color accent;
+  final ValueChanged<bool> onToggle;
+  final Future<void> Function() onDelete;
+  final Future<void> Function() onEdit;
+  final bool isDragPreview;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: rule.enabled
+            ? Colors.white.withValues(alpha: 0.08)
+            : Colors.white.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: isDragPreview
+              ? accent.withValues(alpha: 0.28)
+              : Colors.white.withValues(alpha: 0.08),
+        ),
+        boxShadow: isDragPreview ? [AppShadows.glow(accent)] : null,
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: 0.16),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(Icons.public_rounded, size: 16, color: accent),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  rule.value,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: rule.enabled
+                        ? AppPalette.homeText.withValues(alpha: 0.95)
+                        : AppPalette.homeTextMuted.withValues(alpha: 0.58),
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                    decoration:
+                        rule.enabled ? null : TextDecoration.lineThrough,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _RuleTypeBadge(rule: rule.value),
+                    if (!rule.enabled) const _FormatChip(label: 'Disabled'),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          if (!isDragPreview)
+            Switch(
+              value: rule.enabled,
+              onChanged: onToggle,
+            ),
+          if (!isDragPreview)
+            IconButton(
+              splashRadius: 18,
+              tooltip: 'Delete rule',
+              onPressed: onDelete,
+              icon: const Icon(Icons.delete_outline_rounded, size: 18),
+              color: AppPalette.homeTextMuted.withValues(alpha: 0.86),
+            ),
+          IconButton(
+            splashRadius: 18,
+            tooltip: 'Edit rule',
+            onPressed: isDragPreview ? null : onEdit,
+            icon: Icon(
+              Icons.edit_outlined,
+              size: 18,
+              color: isDragPreview
+                  ? AppPalette.homeTextMuted.withValues(alpha: 0.40)
+                  : accent.withValues(alpha: 0.95),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EditRuleDialog extends StatefulWidget {
+  const _EditRuleDialog({
+    required this.title,
+    required this.initialValue,
+    required this.controller,
+    required this.normalizeRule,
+    required this.validateRule,
+  });
+
+  final String title;
+  final String initialValue;
+  final TextEditingController controller;
+  final String Function(String raw) normalizeRule;
+  final String? Function(String value) validateRule;
+
+  @override
+  State<_EditRuleDialog> createState() => _EditRuleDialogState();
+}
+
+class _EditRuleDialogState extends State<_EditRuleDialog> {
+  String? errorText;
+
+  void _submit() {
+    final normalized = widget.normalizeRule(widget.controller.text);
+    final error = widget.validateRule(normalized);
+    if (error != null) {
+      setState(() {
+        errorText = error;
+      });
+      return;
+    }
+
+    Navigator.of(context).pop(normalized);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.all(24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 560),
+        child: _RulesGlassCard(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Edit rule in ${widget.title}',
+                style: TextStyle(
+                  color: AppPalette.homeText.withValues(alpha: 0.96),
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: widget.controller,
+                autofocus: true,
+                onSubmitted: (_) => _submit(),
+                style: TextStyle(
+                  color: AppPalette.homeText.withValues(alpha: 0.94),
+                ),
+                decoration: InputDecoration(
+                  hintText: widget.initialValue,
+                  hintStyle: TextStyle(
+                    color: AppPalette.homeTextMuted.withValues(alpha: 0.90),
+                  ),
+                  filled: true,
+                  fillColor: Colors.white.withValues(alpha: 0.08),
+                ),
+              ),
+              if (errorText != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  errorText!,
+                  style: const TextStyle(
+                    color: Color(0xFFFF9E8B),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Cancel'),
+                  ),
+                  const SizedBox(width: 10),
+                  FilledButton(
+                    onPressed: _submit,
+                    child: const Text('Save'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PasteListDialog extends StatefulWidget {
+  const _PasteListDialog({
+    required this.bucket,
+    required this.title,
+    required this.normalizeRule,
+    required this.validateRule,
+  });
+
+  final RuleBucket bucket;
+  final String title;
+  final String Function(String raw) normalizeRule;
+  final String? Function(String value) validateRule;
+
+  @override
+  State<_PasteListDialog> createState() => _PasteListDialogState();
+}
+
+class _PasteListDialogState extends State<_PasteListDialog> {
+  late final TextEditingController controller;
+  List<String> invalidLines = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    controller = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final valid = <String>[];
+    final invalid = <String>[];
+
+    for (final rawLine in controller.text.split(RegExp(r'[\r\n]+'))) {
+      final trimmed = rawLine.trim();
+      if (trimmed.isEmpty) {
+        continue;
+      }
+      final normalized = widget.normalizeRule(trimmed);
+      final error = widget.validateRule(normalized);
+      if (error != null) {
+        invalid.add(trimmed);
+        continue;
+      }
+      if (!valid.contains(normalized)) {
+        valid.add(normalized);
+      }
+    }
+
+    if (valid.isEmpty && invalid.isNotEmpty) {
+      setState(() {
+        invalidLines = invalid;
+      });
+      return;
+    }
+
+    Navigator.of(context).pop(
+      _PasteListResult(validRules: valid, invalidLines: invalid),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.all(24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 760),
+        child: _RulesGlassCard(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Paste list to ${widget.title}',
+                style: TextStyle(
+                  color: AppPalette.homeText.withValues(alpha: 0.96),
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'One rule per line. Empty lines are ignored.',
+                style: TextStyle(
+                  color: AppPalette.homeTextMuted.withValues(alpha: 0.82),
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _FormatChip(label: 'example.com'),
+                  _FormatChip(label: '*.example.com'),
+                  _FormatChip(label: '1.1.1.1'),
+                  _FormatChip(label: '192.168.0.0/24'),
+                ],
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: controller,
+                minLines: 8,
+                maxLines: 12,
+                style: TextStyle(
+                  color: AppPalette.homeText.withValues(alpha: 0.94),
+                ),
+                decoration: InputDecoration(
+                  hintText: 'github.com\n*.openai.com\n1.1.1.1\n192.168.0.0/24',
+                  hintStyle: TextStyle(
+                    color: AppPalette.homeTextMuted.withValues(alpha: 0.9),
+                  ),
+                  filled: true,
+                  fillColor: Colors.white.withValues(alpha: 0.08),
+                ),
+              ),
+              if (invalidLines.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFF9E8B).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(
+                      color: const Color(0xFFFF9E8B).withValues(alpha: 0.22),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'These lines could not be added',
+                        style: TextStyle(
+                          color: Color(0xFFFFB6A7),
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      for (final line in invalidLines.take(6))
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Text(
+                            line,
+                            style: TextStyle(
+                              color:
+                                  AppPalette.homeText.withValues(alpha: 0.92),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Cancel'),
+                  ),
+                  const SizedBox(width: 10),
+                  FilledButton(
+                    onPressed: _submit,
+                    child: const Text('Apply'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PasteListResult {
+  const _PasteListResult({
+    required this.validRules,
+    required this.invalidLines,
+  });
+
+  final List<String> validRules;
+  final List<String> invalidLines;
+}
+
+class _PasteListSummaryDialog extends StatelessWidget {
+  const _PasteListSummaryDialog({
+    required this.addedCount,
+    required this.invalidLines,
+  });
+
+  final int addedCount;
+  final List<String> invalidLines;
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.all(24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 620),
+        child: _RulesGlassCard(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Paste results',
+                style: TextStyle(
+                  color: AppPalette.homeText.withValues(alpha: 0.96),
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                addedCount == 1 ? '1 rule added.' : '$addedCount rules added.',
+                style: TextStyle(
+                  color: AppPalette.homeText.withValues(alpha: 0.92),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Lines that need review',
+                style: TextStyle(
+                  color: AppPalette.homeTextMuted.withValues(alpha: 0.84),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFF9E8B).withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(
+                    color: const Color(0xFFFF9E8B).withValues(alpha: 0.20),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (final line in invalidLines.take(8))
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Text(
+                          line,
+                          style: TextStyle(
+                            color: AppPalette.homeText.withValues(alpha: 0.92),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Align(
+                alignment: Alignment.centerRight,
+                child: FilledButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Close'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RuleInputRowAlias extends StatelessWidget {
+  const _RuleInputRowAlias({
+    required this.controller,
+    required this.placeholder,
+    required this.accent,
+    required this.errorText,
+    required this.onAdd,
+  });
+
+  final TextEditingController controller;
+  final String placeholder;
+  final Color accent;
+  final String? errorText;
+  final Future<void> Function() onAdd;
+
+  @override
+  Widget build(BuildContext context) {
+    return _RuleInputRow(
+      controller: controller,
+      placeholder: placeholder,
+      accent: accent,
+      errorText: errorText,
+      onAdd: onAdd,
+    );
+  }
+}
+
+class _FormatChip extends StatelessWidget {
+  const _FormatChip({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: AppPalette.homeTextMuted.withValues(alpha: 0.84),
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+}
+
+class _InlineInfoChip extends StatelessWidget {
+  const _InlineInfoChip({
+    required this.label,
+    required this.accent,
+  });
+
+  final String label;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: accent.withValues(alpha: 0.22)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: AppPalette.homeText.withValues(alpha: 0.94),
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
+class _ResultRow extends StatelessWidget {
+  const _ResultRow({
+    required this.label,
+    required this.value,
+  });
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 120,
+          child: Text(
+            label,
+            style: TextStyle(
+              color: AppPalette.homeTextMuted.withValues(alpha: 0.82),
+              fontSize: 12,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: TextStyle(
+              color: AppPalette.homeText.withValues(alpha: 0.94),
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+String _modeLabel(RoutingMode mode) {
+  switch (mode) {
+    case RoutingMode.global:
+      return 'Protect all traffic';
+    case RoutingMode.whitelist:
+      return 'Only selected sites';
+    case RoutingMode.blacklist:
+      return 'Exclude sites';
+  }
+}
+
+String _behaviorHeadline(RoutingMode mode) {
+  switch (mode) {
+    case RoutingMode.global:
+      return 'All traffic goes through VPN';
+    case RoutingMode.whitelist:
+      return 'Only selected sites use VPN';
+    case RoutingMode.blacklist:
+      return 'All traffic goes through VPN except selected sites';
+  }
+}
+
+List<Widget> _behaviorStats({
+  required RoutingMode routingMode,
+  required int vpnCount,
+  required int directCount,
+  required int blockedCount,
+}) {
+  switch (routingMode) {
+    case RoutingMode.global:
+      return [
+        _InlineInfoChip(
+          label: '$directCount sites open normally',
+          accent: const Color(0xFF97A8FF),
+        ),
+        _InlineInfoChip(
+          label: '$blockedCount blocked',
+          accent: const Color(0xFFFF9E8B),
+        ),
+      ];
+    case RoutingMode.whitelist:
+      return [
+        _InlineInfoChip(
+          label: '$vpnCount sites via VPN',
+          accent: const Color(0xFF6BD7AE),
+        ),
+        _InlineInfoChip(
+          label: '$blockedCount blocked',
+          accent: const Color(0xFFFF9E8B),
+        ),
+      ];
+    case RoutingMode.blacklist:
+      return [
+        _InlineInfoChip(
+          label: '$directCount sites open normally',
+          accent: const Color(0xFF97A8FF),
+        ),
+        _InlineInfoChip(
+          label: '$blockedCount blocked',
+          accent: const Color(0xFFFF9E8B),
+        ),
+      ];
+  }
+}
+
+List<Widget> _previewRuleChips(List<RoutingRule> rules, Color accent) {
+  final visible = rules.take(3).toList(growable: false);
+  final widgets = <Widget>[
+    for (final rule in visible)
+      _InlineInfoChip(
+        label: rule.value,
+        accent: accent,
+      ),
+  ];
+  final hiddenCount = rules.length - visible.length;
+  if (hiddenCount > 0) {
+    widgets.add(
+      _InlineInfoChip(
+        label: '+$hiddenCount more',
+        accent: accent,
+      ),
+    );
+  }
+  return widgets;
 }
 
 class _TrafficStat extends StatelessWidget {

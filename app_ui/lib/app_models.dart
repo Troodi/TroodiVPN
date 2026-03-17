@@ -1,5 +1,32 @@
 part of 'main.dart';
 
+class RoutingRule {
+  const RoutingRule({
+    required this.value,
+    required this.type,
+    required this.bucket,
+    required this.enabled,
+  });
+
+  final String value;
+  final RuleType type;
+  final RuleBucket bucket;
+  final bool enabled;
+
+  String get typeLabel {
+    switch (type) {
+      case RuleType.domain:
+        return 'DOMAIN';
+      case RuleType.wildcard:
+        return 'WILDCARD';
+      case RuleType.ip:
+        return 'IP';
+      case RuleType.cidr:
+        return 'CIDR';
+    }
+  }
+}
+
 class ServerProfile {
   const ServerProfile({
     required this.id,

@@ -12,6 +12,10 @@ enum AppPage { home, rules, profiles, settings }
 
 enum TunnelMode { vpn, proxy }
 
+enum RuleType { domain, wildcard, ip, cidr }
+
+enum RuleBucket { vpn, direct, blocked }
+
 class AppPalette {
   static const bg0 = Color(0xFFF0F1F4);
   static const bg1 = Color(0xFFE6E7EB);

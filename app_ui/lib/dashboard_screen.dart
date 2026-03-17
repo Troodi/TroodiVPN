@@ -44,6 +44,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final Set<String> disabledBlockedRules = <String>{};
 
   String activeProfileId = '';
+  String? vpnInputError;
+  String? directInputError;
+  String? blockedInputError;
 
   @override
   void initState() {
@@ -700,157 +703,116 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildRulesView() {
     final testResult = _testRule(ruleTestController.text);
+    final vpnRules = _rulesForBucket(RuleBucket.vpn);
+    final directRules = _rulesForBucket(RuleBucket.direct);
+    final blockedRules = _rulesForBucket(RuleBucket.blocked);
+
     return LayoutBuilder(
       builder: (context, constraints) {
-        final columns = [
-          _buildRulesColumnCard(
-            title: 'Via VPN',
-            subtitle: 'Use VPN for these domains',
-            counter: proxyDomains.length,
-            searchController: vpnSearchController,
-            inputController: proxyController,
-            placeholder: 'github.com',
-            domains: proxyDomains,
-            disabledRules: disabledVpnRules,
-            accent: const Color(0xFF6CEB86),
-            emptyText: 'No VPN rules yet.',
-            onAdd: () => _addDomain(
-              proxyController,
-              proxyDomains,
-              (items) =>
-                  _saveConfig(_currentConfig().copyWith(proxyDomains: items)),
-            ),
-            onPaste: () => _pasteRuleList(
-              proxyDomains,
-              (items) =>
-                  _saveConfig(_currentConfig().copyWith(proxyDomains: items)),
-            ),
-            onRemove: (domain) => _saveConfig(
-              _currentConfig().copyWith(
-                proxyDomains:
-                    proxyDomains.where((item) => item != domain).toList(),
-              ),
-            ),
-            onToggleRule: (domain, enabled) {
-              setState(() {
-                if (enabled) {
-                  disabledVpnRules.remove(domain);
-                } else {
-                  disabledVpnRules.add(domain);
-                }
-              });
-            },
-          ),
-          _buildRulesColumnCard(
-            title: 'Open normally',
-            subtitle: 'Bypass VPN for these domains',
-            counter: directDomains.length,
-            searchController: directSearchController,
-            inputController: directController,
-            placeholder: 'bank.ru',
-            domains: directDomains,
-            disabledRules: disabledDirectRules,
-            accent: const Color(0xFF8EA2FF),
-            emptyText: 'No direct rules yet.',
-            onAdd: () => _addDomain(
-              directController,
-              directDomains,
-              (items) =>
-                  _saveConfig(_currentConfig().copyWith(directDomains: items)),
-            ),
-            onPaste: () => _pasteRuleList(
-              directDomains,
-              (items) =>
-                  _saveConfig(_currentConfig().copyWith(directDomains: items)),
-            ),
-            onRemove: (domain) => _saveConfig(
-              _currentConfig().copyWith(
-                directDomains:
-                    directDomains.where((item) => item != domain).toList(),
-              ),
-            ),
-            onToggleRule: (domain, enabled) {
-              setState(() {
-                if (enabled) {
-                  disabledDirectRules.remove(domain);
-                } else {
-                  disabledDirectRules.add(domain);
-                }
-              });
-            },
-          ),
-          _buildRulesColumnCard(
-            title: 'Blocked',
-            subtitle: 'Drop traffic for these domains',
-            counter: blockedDomains.length,
-            searchController: blockedSearchController,
-            inputController: blockedController,
-            placeholder: 'ads.example.com',
-            domains: blockedDomains,
-            disabledRules: disabledBlockedRules,
-            accent: const Color(0xFFFF9E8B),
-            emptyText: 'No blocked rules yet.',
-            onAdd: () => _addDomain(
-              blockedController,
-              blockedDomains,
-              (items) =>
-                  _saveConfig(_currentConfig().copyWith(blockedDomains: items)),
-            ),
-            onPaste: () => _pasteRuleList(
-              blockedDomains,
-              (items) =>
-                  _saveConfig(_currentConfig().copyWith(blockedDomains: items)),
-            ),
-            onRemove: (domain) => _saveConfig(
-              _currentConfig().copyWith(
-                blockedDomains:
-                    blockedDomains.where((item) => item != domain).toList(),
-              ),
-            ),
-            onToggleRule: (domain, enabled) {
-              setState(() {
-                if (enabled) {
-                  disabledBlockedRules.remove(domain);
-                } else {
-                  disabledBlockedRules.add(domain);
-                }
-              });
-            },
-          ),
-        ];
-
-        final conflicts = _findRuleConflicts();
-
         final listChildren = <Widget>[
           _RulesModeCard(
             routingMode: routingMode,
             onModeChanged: (value) =>
                 _saveConfig(_currentConfig().copyWith(routingMode: value)),
-          ),
+          ).animate().fadeIn(duration: 240.ms).slideY(
+                begin: 0.05,
+                end: 0,
+                duration: 280.ms,
+                curve: Curves.easeOutCubic,
+              ),
           const SizedBox(height: 16),
-          _RoutingTreeCard(
+          _TrafficBehaviorCard(
             routingMode: routingMode,
-            vpnDomains: _enabledRules(proxyDomains, disabledVpnRules),
-            directDomains: _enabledRules(directDomains, disabledDirectRules),
-          ),
+            vpnCount: vpnRules.where((rule) => rule.enabled).length,
+            directCount: directRules.where((rule) => rule.enabled).length,
+            blockedCount: blockedRules.where((rule) => rule.enabled).length,
+            onViewDetails: _showRoutingDetailsDialog,
+          ).animate().fadeIn(delay: 80.ms, duration: 240.ms).slideY(
+                begin: 0.05,
+                end: 0,
+                delay: 80.ms,
+                duration: 280.ms,
+                curve: Curves.easeOutCubic,
+              ),
           const SizedBox(height: 16),
-          _RulesVisualizationCard(
-            routingMode: routingMode,
-            vpnDomains: _enabledRules(proxyDomains, disabledVpnRules),
-            directDomains: _enabledRules(directDomains, disabledDirectRules),
-            blockedDomains: _enabledRules(blockedDomains, disabledBlockedRules),
-          ),
-          const SizedBox(height: 16),
-          _RuleTesterCard(
+          _DomainTestCard(
             controller: ruleTestController,
             result: testResult,
             onChanged: () => setState(() {}),
-          ),
-          if (conflicts.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            _RuleConflictsCard(conflicts: conflicts),
-          ],
+          ).animate().fadeIn(delay: 140.ms, duration: 240.ms).slideY(
+                begin: 0.05,
+                end: 0,
+                delay: 140.ms,
+                duration: 280.ms,
+                curve: Curves.easeOutCubic,
+              ),
           const SizedBox(height: 16),
+        ];
+
+        final columns = [
+          _RulesColumnCard(
+            bucket: RuleBucket.vpn,
+            title: 'Via VPN',
+            subtitle: 'Use VPN for these domains',
+            placeholder: 'github.com',
+            accent: const Color(0xFF68D6A1),
+            rules: vpnRules,
+            errorText: vpnInputError,
+            searchController: vpnSearchController,
+            inputController: proxyController,
+            emptyText: 'No VPN rules yet.',
+            onChanged: () => setState(() {}),
+            onAdd: () => _addRuleToBucket(RuleBucket.vpn),
+            onPaste: () => _pasteRulesToBucket(RuleBucket.vpn),
+            onToggleRule: (value, enabled) =>
+                _setRuleEnabled(RuleBucket.vpn, value, enabled),
+            onDeleteRule: (value) =>
+                _removeRuleFromBucket(RuleBucket.vpn, value),
+            onEditRule: (rule) => _editRule(rule),
+            onAcceptRule: (rule) => _moveRuleToBucket(rule, RuleBucket.vpn),
+          ),
+          _RulesColumnCard(
+            bucket: RuleBucket.direct,
+            title: 'Open normally',
+            subtitle: 'Bypass VPN for these domains',
+            placeholder: 'bank.ru',
+            accent: const Color(0xFF97A8FF),
+            rules: directRules,
+            errorText: directInputError,
+            searchController: directSearchController,
+            inputController: directController,
+            emptyText: 'No direct rules yet.',
+            onChanged: () => setState(() {}),
+            onAdd: () => _addRuleToBucket(RuleBucket.direct),
+            onPaste: () => _pasteRulesToBucket(RuleBucket.direct),
+            onToggleRule: (value, enabled) =>
+                _setRuleEnabled(RuleBucket.direct, value, enabled),
+            onDeleteRule: (value) =>
+                _removeRuleFromBucket(RuleBucket.direct, value),
+            onEditRule: (rule) => _editRule(rule),
+            onAcceptRule: (rule) => _moveRuleToBucket(rule, RuleBucket.direct),
+          ),
+          _RulesColumnCard(
+            bucket: RuleBucket.blocked,
+            title: 'Blocked',
+            subtitle: 'Drop traffic for these domains',
+            placeholder: 'ads.example.com',
+            accent: const Color(0xFFFF9E8B),
+            rules: blockedRules,
+            errorText: blockedInputError,
+            searchController: blockedSearchController,
+            inputController: blockedController,
+            emptyText: 'No blocked rules yet.',
+            onChanged: () => setState(() {}),
+            onAdd: () => _addRuleToBucket(RuleBucket.blocked),
+            onPaste: () => _pasteRulesToBucket(RuleBucket.blocked),
+            onToggleRule: (value, enabled) =>
+                _setRuleEnabled(RuleBucket.blocked, value, enabled),
+            onDeleteRule: (value) =>
+                _removeRuleFromBucket(RuleBucket.blocked, value),
+            onEditRule: (rule) => _editRule(rule),
+            onAcceptRule: (rule) => _moveRuleToBucket(rule, RuleBucket.blocked),
+          ),
         ];
 
         if (constraints.maxWidth >= 1100) {
@@ -864,7 +826,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 const SizedBox(width: 16),
                 Expanded(child: columns[2]),
               ],
-            ),
+            ).animate().fadeIn(delay: 220.ms, duration: 260.ms).slideY(
+                  begin: 0.04,
+                  end: 0,
+                  delay: 220.ms,
+                  duration: 300.ms,
+                  curve: Curves.easeOutCubic,
+                ),
           );
         } else if (constraints.maxWidth >= 760) {
           listChildren.add(
@@ -876,25 +844,41 @@ class _DashboardScreenState extends State<DashboardScreen> {
               crossAxisSpacing: 16,
               mainAxisSpacing: 16,
               children: columns,
-            ),
+            ).animate().fadeIn(delay: 220.ms, duration: 260.ms).slideY(
+                  begin: 0.04,
+                  end: 0,
+                  delay: 220.ms,
+                  duration: 300.ms,
+                  curve: Curves.easeOutCubic,
+                ),
           );
         } else {
           listChildren.addAll([
-            columns[0],
+            columns[0].animate().fadeIn(delay: 220.ms, duration: 260.ms).slideY(
+                  begin: 0.04,
+                  end: 0,
+                  delay: 220.ms,
+                  duration: 300.ms,
+                  curve: Curves.easeOutCubic,
+                ),
             const SizedBox(height: 16),
-            columns[1],
+            columns[1].animate().fadeIn(delay: 280.ms, duration: 260.ms).slideY(
+                  begin: 0.04,
+                  end: 0,
+                  delay: 280.ms,
+                  duration: 300.ms,
+                  curve: Curves.easeOutCubic,
+                ),
             const SizedBox(height: 16),
-            columns[2],
+            columns[2].animate().fadeIn(delay: 340.ms, duration: 260.ms).slideY(
+                  begin: 0.04,
+                  end: 0,
+                  delay: 340.ms,
+                  duration: 300.ms,
+                  curve: Curves.easeOutCubic,
+                ),
           ]);
         }
-
-        listChildren.addAll([
-          const SizedBox(height: 16),
-          _RulesQuickActionsCard(
-            onReset: _resetRules,
-            onRestoreRecommended: _restoreRecommendedRules,
-          ),
-        ]);
 
         return ListView(
           children: listChildren,
@@ -903,262 +887,319 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildRulesColumnCard({
-    required String title,
-    required String subtitle,
-    required int counter,
-    required TextEditingController searchController,
-    required TextEditingController inputController,
-    required String placeholder,
-    required List<String> domains,
-    required Set<String> disabledRules,
-    required Color accent,
-    required String emptyText,
-    required Future<void> Function() onAdd,
-    required Future<void> Function() onPaste,
-    required Future<void> Function(String) onRemove,
-    required void Function(String domain, bool enabled) onToggleRule,
-  }) {
-    final query = searchController.text.trim().toLowerCase();
-    final filtered =
-        domains.where((item) => item.toLowerCase().contains(query)).toList();
+  List<RoutingRule> _rulesForBucket(RuleBucket bucket) {
+    final values = _rulesForBucketValues(bucket);
+    final disabled = _disabledRulesForBucket(bucket);
+    return [
+      for (final value in values)
+        RoutingRule(
+          value: value,
+          type: _detectRuleType(value) ?? RuleType.domain,
+          bucket: bucket,
+          enabled: !disabled.contains(value),
+        ),
+    ];
+  }
 
-    return SizedBox(
-      height: 560,
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Colors.white.withValues(alpha: 0.10),
-              Colors.white.withValues(alpha: 0.05),
-            ],
-          ),
-          borderRadius: BorderRadius.circular(28),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
-          boxShadow: [AppShadows.darkCard],
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(18),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      '$title ($counter)',
-                      style: TextStyle(
-                        color: AppPalette.homeText.withValues(alpha: 0.96),
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: accent.withValues(alpha: 0.16),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Text(
-                      '$counter rules',
-                      style: TextStyle(
-                        color: accent,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Text(
-                subtitle,
-                style: TextStyle(
-                  color: AppPalette.homeTextMuted.withValues(alpha: 0.84),
-                  fontSize: 13,
-                ),
-              ),
-              const SizedBox(height: 14),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: inputController,
-                      onSubmitted: (_) => onAdd(),
-                      style: TextStyle(
-                        color: AppPalette.homeText.withValues(alpha: 0.94),
-                        fontSize: 13,
-                      ),
-                      decoration: InputDecoration(
-                        hintText: placeholder,
-                        hintStyle: TextStyle(
-                          color:
-                              AppPalette.homeTextMuted.withValues(alpha: 0.90),
-                        ),
-                        filled: true,
-                        fillColor: Colors.white.withValues(alpha: 0.08),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  FilledButton.icon(
-                    onPressed: onAdd,
-                    icon: const Icon(Icons.add_rounded, size: 16),
-                    label: const Text('Add'),
-                    style: AppUi.primaryButton(accent),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  FilledButton.tonalIcon(
-                    onPressed: onPaste,
-                    icon: const Icon(Icons.content_paste_rounded, size: 16),
-                    label: const Text('Paste list'),
-                    style: FilledButton.styleFrom(
-                      foregroundColor: AppPalette.homeText,
-                      backgroundColor: Colors.white.withValues(alpha: 0.18),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: searchController,
-                onChanged: (_) => setState(() {}),
-                style: TextStyle(
-                  color: AppPalette.homeText.withValues(alpha: 0.94),
-                  fontSize: 13,
-                ),
-                decoration: InputDecoration(
-                  hintText: 'Search rules...',
-                  hintStyle: TextStyle(
-                    color: AppPalette.homeTextMuted.withValues(alpha: 0.90),
-                  ),
-                  prefixIcon: const Icon(Icons.search_rounded, size: 18),
-                  filled: true,
-                  fillColor: Colors.white.withValues(alpha: 0.06),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  Text(
-                    'Supported formats',
-                    style: TextStyle(
-                      color: AppPalette.homeTextMuted.withValues(alpha: 0.78),
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  for (final item in const [
-                    'example.com',
-                    '*.example.com',
-                    '1.1.1.1',
-                    '192.168.0.0/24',
-                  ])
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.07),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        item,
-                        style: TextStyle(
-                          color:
-                              AppPalette.homeTextMuted.withValues(alpha: 0.78),
-                          fontSize: 10,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 14),
-              SizedBox(
-                height: 280,
-                child: filtered.isEmpty
-                    ? Center(
-                        child: Text(
-                          emptyText,
-                          style: TextStyle(
-                            color: AppPalette.homeTextMuted
-                                .withValues(alpha: 0.72),
-                          ),
-                        ),
-                      )
-                    : ListView.separated(
-                        itemCount: filtered.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 8),
-                        itemBuilder: (context, index) {
-                          final domain = filtered[index];
-                          return Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 10),
-                            decoration: BoxDecoration(
-                              color: disabledRules.contains(domain)
-                                  ? Colors.white.withValues(alpha: 0.04)
-                                  : Colors.white.withValues(alpha: 0.08),
-                              borderRadius: BorderRadius.circular(18),
-                              border: Border.all(
-                                  color: Colors.white.withValues(alpha: 0.08)),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(Icons.public_rounded,
-                                    size: 16, color: accent),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    domain,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      color: disabledRules.contains(domain)
-                                          ? AppPalette.homeTextMuted
-                                              .withValues(alpha: 0.58)
-                                          : AppPalette.homeText
-                                              .withValues(alpha: 0.95),
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 13,
-                                      decoration: disabledRules.contains(domain)
-                                          ? TextDecoration.lineThrough
-                                          : null,
-                                    ),
-                                  ),
-                                ),
-                                _RuleTypeBadge(rule: domain),
-                                const SizedBox(width: 4),
-                                Switch(
-                                  value: !disabledRules.contains(domain),
-                                  onChanged: (value) =>
-                                      onToggleRule(domain, value),
-                                ),
-                                IconButton(
-                                  onPressed: () => onRemove(domain),
-                                  icon: const Icon(Icons.delete_outline_rounded,
-                                      size: 18),
-                                  color: AppPalette.homeTextMuted
-                                      .withValues(alpha: 0.86),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
-              ),
-            ],
-          ),
-        ),
+  List<String> _rulesForBucketValues(RuleBucket bucket) {
+    switch (bucket) {
+      case RuleBucket.vpn:
+        return proxyDomains;
+      case RuleBucket.direct:
+        return directDomains;
+      case RuleBucket.blocked:
+        return blockedDomains;
+    }
+  }
+
+  Set<String> _disabledRulesForBucket(RuleBucket bucket) {
+    switch (bucket) {
+      case RuleBucket.vpn:
+        return disabledVpnRules;
+      case RuleBucket.direct:
+        return disabledDirectRules;
+      case RuleBucket.blocked:
+        return disabledBlockedRules;
+    }
+  }
+
+  TextEditingController _inputControllerForBucket(RuleBucket bucket) {
+    switch (bucket) {
+      case RuleBucket.vpn:
+        return proxyController;
+      case RuleBucket.direct:
+        return directController;
+      case RuleBucket.blocked:
+        return blockedController;
+    }
+  }
+
+  void _setInputError(RuleBucket bucket, String? value) {
+    setState(() {
+      switch (bucket) {
+        case RuleBucket.vpn:
+          vpnInputError = value;
+        case RuleBucket.direct:
+          directInputError = value;
+        case RuleBucket.blocked:
+          blockedInputError = value;
+      }
+    });
+  }
+
+  Future<void> _replaceRulesForBucket(
+      RuleBucket bucket, List<String> items) async {
+    switch (bucket) {
+      case RuleBucket.vpn:
+        await _saveConfig(_currentConfig().copyWith(proxyDomains: items));
+      case RuleBucket.direct:
+        await _saveConfig(_currentConfig().copyWith(directDomains: items));
+      case RuleBucket.blocked:
+        await _saveConfig(_currentConfig().copyWith(blockedDomains: items));
+    }
+  }
+
+  Future<void> _addRuleToBucket(RuleBucket bucket) async {
+    final controller = _inputControllerForBucket(bucket);
+    final normalized = _normalizeRuleValue(controller.text);
+    final validationError = _validateRuleValue(normalized);
+    final current = _rulesForBucketValues(bucket);
+
+    if (validationError != null) {
+      _setInputError(bucket, validationError);
+      return;
+    }
+    if (current.contains(normalized)) {
+      _setInputError(bucket, 'This rule already exists in the list.');
+      return;
+    }
+
+    await _replaceRulesForBucket(bucket, [normalized, ...current]);
+    controller.clear();
+    _setInputError(bucket, null);
+  }
+
+  Future<void> _removeRuleFromBucket(RuleBucket bucket, String value) async {
+    final next = _rulesForBucketValues(bucket)
+        .where((item) => item != value)
+        .toList(growable: false);
+    await _replaceRulesForBucket(bucket, next);
+  }
+
+  Future<void> _moveRuleToBucket(
+      RoutingRule rule, RuleBucket targetBucket) async {
+    if (rule.bucket == targetBucket) {
+      return;
+    }
+
+    final vpn = List<String>.from(proxyDomains);
+    final direct = List<String>.from(directDomains);
+    final blocked = List<String>.from(blockedDomains);
+
+    List<String> source;
+    List<String> target;
+
+    switch (rule.bucket) {
+      case RuleBucket.vpn:
+        source = vpn;
+      case RuleBucket.direct:
+        source = direct;
+      case RuleBucket.blocked:
+        source = blocked;
+    }
+
+    switch (targetBucket) {
+      case RuleBucket.vpn:
+        target = vpn;
+      case RuleBucket.direct:
+        target = direct;
+      case RuleBucket.blocked:
+        target = blocked;
+    }
+
+    source.removeWhere((item) => item == rule.value);
+    if (!target.contains(rule.value)) {
+      target.insert(0, rule.value);
+    }
+
+    final sourceDisabled = _disabledRulesForBucket(rule.bucket);
+    final targetDisabled = _disabledRulesForBucket(targetBucket);
+
+    setState(() {
+      sourceDisabled.remove(rule.value);
+      if (rule.enabled) {
+        targetDisabled.remove(rule.value);
+      } else {
+        targetDisabled.add(rule.value);
+      }
+    });
+
+    await _saveConfig(
+      _currentConfig().copyWith(
+        proxyDomains: vpn,
+        directDomains: direct,
+        blockedDomains: blocked,
       ),
     );
+
+    if (!mounted) {
+      return;
+    }
+    _showMessage('Moved to ${_bucketTitle(targetBucket)}.');
+  }
+
+  Future<void> _editRule(RoutingRule rule) async {
+    final controller = TextEditingController(text: rule.value);
+    final nextValue = await showDialog<String>(
+      context: context,
+      builder: (context) => _EditRuleDialog(
+        title: _bucketTitle(rule.bucket),
+        initialValue: rule.value,
+        controller: controller,
+        normalizeRule: _normalizeRuleValue,
+        validateRule: _validateRuleValue,
+      ),
+    );
+    controller.dispose();
+
+    if (nextValue == null || nextValue == rule.value) {
+      return;
+    }
+
+    final current = List<String>.from(_rulesForBucketValues(rule.bucket));
+    if (current.contains(nextValue)) {
+      _showMessage('This rule already exists in ${_bucketTitle(rule.bucket)}.');
+      return;
+    }
+
+    final updated = [
+      for (final item in current) item == rule.value ? nextValue : item,
+    ];
+    await _replaceRulesForBucket(rule.bucket, updated);
+
+    final disabled = _disabledRulesForBucket(rule.bucket);
+    setState(() {
+      final wasDisabled = disabled.remove(rule.value);
+      if (wasDisabled) {
+        disabled.add(nextValue);
+      }
+    });
+
+    if (!mounted) {
+      return;
+    }
+    _showMessage('Rule updated.');
+  }
+
+  void _setRuleEnabled(RuleBucket bucket, String value, bool enabled) {
+    final disabled = _disabledRulesForBucket(bucket);
+    setState(() {
+      if (enabled) {
+        disabled.remove(value);
+      } else {
+        disabled.add(value);
+      }
+    });
+  }
+
+  Future<void> _pasteRulesToBucket(RuleBucket bucket) async {
+    final result = await showDialog<_PasteListResult>(
+      context: context,
+      builder: (context) => _PasteListDialog(
+        bucket: bucket,
+        title: _bucketTitle(bucket),
+        normalizeRule: _normalizeRuleValue,
+        validateRule: _validateRuleValue,
+      ),
+    );
+    if (result == null) {
+      return;
+    }
+
+    final current = _rulesForBucketValues(bucket);
+    final merged = <String>[...current];
+    var addedCount = 0;
+    for (final value in result.validRules) {
+      if (!merged.contains(value)) {
+        merged.add(value);
+        addedCount++;
+      }
+    }
+
+    await _replaceRulesForBucket(bucket, merged);
+    if (!mounted) {
+      return;
+    }
+
+    if (result.invalidLines.isNotEmpty) {
+      await showDialog<void>(
+        context: context,
+        builder: (context) => _PasteListSummaryDialog(
+          addedCount: addedCount,
+          invalidLines: result.invalidLines,
+        ),
+      );
+      return;
+    }
+
+    _showMessage(
+      addedCount == 1 ? '1 rule added.' : '$addedCount rules added.',
+    );
+  }
+
+  Future<void> _confirmResetRules() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Reset rules'),
+        content: const Text(
+          'This will clear Via VPN, Open normally, and Blocked lists.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Reset'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await _resetRules();
+    }
+  }
+
+  Future<void> _showRoutingDetailsDialog() async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) => _RoutingDetailsDialog(
+        routingMode: routingMode,
+        vpnRules: _rulesForBucket(RuleBucket.vpn)
+            .where((rule) => rule.enabled)
+            .toList(growable: false),
+        directRules: _rulesForBucket(RuleBucket.direct)
+            .where((rule) => rule.enabled)
+            .toList(growable: false),
+        blockedRules: _rulesForBucket(RuleBucket.blocked)
+            .where((rule) => rule.enabled)
+            .toList(growable: false),
+      ),
+    );
+  }
+
+  String _bucketTitle(RuleBucket bucket) {
+    switch (bucket) {
+      case RuleBucket.vpn:
+        return 'Via VPN';
+      case RuleBucket.direct:
+        return 'Open normally';
+      case RuleBucket.blocked:
+        return 'Blocked';
+    }
   }
 
   List<Widget> _rulesCards() {
@@ -1879,8 +1920,106 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  String _normalizeRuleValue(String raw) {
+    final trimmed = raw.trim().toLowerCase();
+    if (trimmed.isEmpty) {
+      return '';
+    }
+    final withoutScheme = trimmed.replaceFirst(RegExp(r'^[a-z]+://'), '');
+    if (RegExp(r'^\d{1,3}(?:\.\d{1,3}){3}/\d{1,2}$').hasMatch(withoutScheme)) {
+      return withoutScheme;
+    }
+    final slashIndex = withoutScheme.indexOf('/');
+    final candidate = slashIndex >= 0
+        ? withoutScheme.substring(0, slashIndex)
+        : withoutScheme;
+    return candidate.trim();
+  }
+
+  String? _validateRuleValue(String value) {
+    if (value.isEmpty) {
+      return 'Enter a domain, IP, or CIDR rule.';
+    }
+    final type = _detectRuleType(value);
+    if (type == null) {
+      return 'Use a valid domain, wildcard, IP, or CIDR.';
+    }
+    return null;
+  }
+
+  RuleType? _detectRuleType(String value) {
+    if (_isValidCidr(value)) {
+      return RuleType.cidr;
+    }
+    if (_isValidIpv4(value)) {
+      return RuleType.ip;
+    }
+    if (value == 'localhost') {
+      return RuleType.domain;
+    }
+    if (value.startsWith('*.') && _isValidDomain(value.substring(2))) {
+      return RuleType.wildcard;
+    }
+    if (_isValidDomain(value)) {
+      return RuleType.domain;
+    }
+    return null;
+  }
+
+  bool _isValidDomain(String value) {
+    final regex = RegExp(
+      r'^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9][a-z0-9-]{0,62}$',
+    );
+    return regex.hasMatch(value);
+  }
+
+  bool _isValidIpv4(String value) {
+    final parts = value.split('.');
+    if (parts.length != 4) {
+      return false;
+    }
+    for (final part in parts) {
+      final parsed = int.tryParse(part);
+      if (parsed == null || parsed < 0 || parsed > 255) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  bool _isValidCidr(String value) {
+    final parts = value.split('/');
+    if (parts.length != 2) {
+      return false;
+    }
+    final prefix = int.tryParse(parts[1]);
+    if (!_isValidIpv4(parts[0]) ||
+        prefix == null ||
+        prefix < 0 ||
+        prefix > 32) {
+      return false;
+    }
+    return true;
+  }
+
+  int _ipv4ToInt(String value) {
+    final parts = value.split('.').map(int.parse).toList(growable: false);
+    return (parts[0] << 24) + (parts[1] << 16) + (parts[2] << 8) + parts[3];
+  }
+
+  bool _cidrContains(String cidr, String ip) {
+    if (!_isValidCidr(cidr) || !_isValidIpv4(ip)) {
+      return false;
+    }
+    final parts = cidr.split('/');
+    final network = _ipv4ToInt(parts[0]);
+    final prefix = int.parse(parts[1]);
+    final mask = prefix == 0 ? 0 : 0xFFFFFFFF << (32 - prefix);
+    return (network & mask) == (_ipv4ToInt(ip) & mask);
+  }
+
   _RuleTestResult _testRule(String raw) {
-    final value = _normalizeDomain(raw);
+    final value = _normalizeRuleValue(raw);
     if (value.isEmpty) {
       return const _RuleTestResult.empty();
     }
@@ -1897,6 +2036,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           matchedRule: item,
           accent: const Color(0xFFFF9E8B),
           hasMatch: true,
+          typeLabel: _detectRuleType(item)?.name.toUpperCase() ?? 'DOMAIN',
+          defaultBehavior: '',
         );
       }
     }
@@ -1908,17 +2049,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
             input: value,
             destination: 'Via VPN',
             matchedRule: item,
-            accent: const Color(0xFF6CEB86),
+            accent: const Color(0xFF6BD7AE),
             hasMatch: true,
+            typeLabel: _detectRuleType(item)?.name.toUpperCase() ?? 'DOMAIN',
+            defaultBehavior: '',
           );
         }
       }
       return _RuleTestResult(
         input: value,
         destination: 'Open normally',
-        matchedRule: 'No matching rules',
+        matchedRule: '',
         accent: const Color(0xFF8EA2FF),
         hasMatch: false,
+        typeLabel: '',
+        defaultBehavior: 'Open normally',
       );
     }
 
@@ -1930,6 +2075,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           matchedRule: item,
           accent: const Color(0xFF8EA2FF),
           hasMatch: true,
+          typeLabel: _detectRuleType(item)?.name.toUpperCase() ?? 'DOMAIN',
+          defaultBehavior: '',
         );
       }
     }
@@ -1939,9 +2086,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
       return _RuleTestResult(
         input: value,
         destination: 'Via VPN',
-        matchedRule: 'No matching rules',
-        accent: const Color(0xFF6CEB86),
+        matchedRule: '',
+        accent: const Color(0xFF6BD7AE),
         hasMatch: false,
+        typeLabel: '',
+        defaultBehavior: 'Via VPN',
       );
     }
 
@@ -1992,18 +2141,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   bool _ruleMatches(String rule, String value) {
-    final normalizedRule = _normalizeDomain(rule);
+    final normalizedRule = _normalizeRuleValue(rule);
     if (normalizedRule.isEmpty) {
       return false;
+    }
+    final ruleType = _detectRuleType(normalizedRule);
+    if (ruleType == RuleType.cidr) {
+      return _cidrContains(normalizedRule, value);
+    }
+    if (ruleType == RuleType.ip) {
+      return normalizedRule == value;
     }
     if (normalizedRule == value) {
       return true;
     }
-    if (normalizedRule.startsWith('*.')) {
+    if (ruleType == RuleType.wildcard) {
       return value == normalizedRule.substring(2) ||
           value.endsWith('.${normalizedRule.substring(2)}');
     }
-    return value.endsWith('.$normalizedRule');
+    if (ruleType == RuleType.domain) {
+      return value.endsWith('.$normalizedRule');
+    }
+    return false;
   }
 
   String _normalizeDomain(String raw) {

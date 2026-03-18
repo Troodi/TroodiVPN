@@ -47,9 +47,12 @@ class BackendClient {
     return body['elevated'] as bool? ?? false;
   }
 
-  Future<void> requestAdmin() async {
-    final response =
-        await http.post(Uri.parse('$baseUrl/api/v1/request-admin'));
+  Future<void> requestAdmin([String? password]) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/v1/request-admin'),
+      headers: password == null ? null : {'Content-Type': 'application/json'},
+      body: password == null ? null : jsonEncode({'password': password}),
+    );
     if (response.statusCode >= 400) {
       throw Exception(response.body);
     }

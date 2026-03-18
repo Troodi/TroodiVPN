@@ -103,8 +103,30 @@ func (s *Server) handleGetAdminStatus(w http.ResponseWriter, _ *http.Request) {
 	})
 }
 
-func (s *Server) handleRequestAdmin(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) handleRequestAdmin(w http.ResponseWriter, r *http.Request) {
+	type adminRequest struct {
+		Password string `json:"password"`
+	}
+
 	if platform.IsElevated() {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"elevated":  true,
+			"requested": false,
+		})
+		return
+	}
+
+	var payload adminRequest
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil && err.Error() != "EOF" {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if payload.Password != "" {
+		if err := platform.SetElevationSecret(payload.Password); err != nil {
+			http.Error(w, err.Error(), http.StatusUnauthorized)
+			return
+		}
 		writeJSON(w, http.StatusOK, map[string]any{
 			"elevated":  true,
 			"requested": false,

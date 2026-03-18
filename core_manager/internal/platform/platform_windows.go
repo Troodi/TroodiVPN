@@ -87,6 +87,14 @@ func RequestElevation(executablePath, workingDirectory string) error {
 	).Start()
 }
 
+func SetElevationSecret(secret string) error {
+	return nil
+}
+
+func CommandAsRoot(name string, args ...string) (*exec.Cmd, error) {
+	return exec.Command(name, args...), nil
+}
+
 func CaptureSystemProxy() (*ProxySettings, error) {
 	key, err := registry.OpenKey(
 		registry.CURRENT_USER,

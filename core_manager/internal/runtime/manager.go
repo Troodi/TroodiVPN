@@ -12,7 +12,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -238,7 +240,15 @@ func (m *Manager) startLocked(cfg config.AppConfig) error {
 		return err
 	}
 
-	cmd := exec.Command(m.binaryPath, "run", "-c", configPath)
+	var cmd *exec.Cmd
+	if cfg.TUNEnabled {
+		cmd, err = platform.CommandAsRoot(m.binaryPath, "run", "-c", configPath)
+		if err != nil {
+			return err
+		}
+	} else {
+		cmd = exec.Command(m.binaryPath, "run", "-c", configPath)
+	}
 	cmd.Dir = filepath.Dir(m.binaryPath)
 	cmd.Env = append(os.Environ(), "xray.location.asset="+assetDir)
 	cmd.SysProcAttr = hiddenProcessAttributes()
@@ -323,6 +333,9 @@ func (m *Manager) stopLocked() error {
 	if err != nil && !errors.Is(err, os.ErrProcessDone) {
 		m.lastError = err.Error()
 		return err
+	}
+	if cleanupErr := m.cleanupStaleProcessesLocked(); cleanupErr != nil {
+		m.appendLogLocked("stale process cleanup error: " + cleanupErr.Error())
 	}
 
 	m.running = false
@@ -582,6 +595,9 @@ func (m *Manager) waitForExit(cmd *exec.Cmd) {
 		m.lastExit = "xray exited cleanly"
 		m.appendLogLocked(m.lastExit)
 	}
+	if cleanupErr := m.cleanupStaleProcessesLocked(); cleanupErr != nil {
+		m.appendLogLocked("stale process cleanup error: " + cleanupErr.Error())
+	}
 
 	m.stopMetricsLoopLocked()
 	if cleanupErr := platform.CleanupTUN(m.tunState); cleanupErr == nil {
@@ -652,34 +668,89 @@ func (m *Manager) isRunningLocked() bool {
 }
 
 func (m *Manager) cleanupStaleProcessesLocked() error {
-	if runtime.GOOS != "windows" {
-		return nil
-	}
-
-	pids, err := findBinaryProcessIDs(m.binaryPath)
-	if err != nil {
-		return err
-	}
-
 	currentPID := 0
 	if m.cmd != nil && m.cmd.Process != nil {
 		currentPID = m.cmd.Process.Pid
 	}
 
-	for _, pid := range pids {
+	if runtime.GOOS == "windows" {
+		pids, err := findBinaryProcessIDs(m.binaryPath)
+		if err != nil {
+			return err
+		}
+
+		for _, pid := range pids {
+			if pid == 0 || pid == currentPID {
+				continue
+			}
+
+			cmd := exec.Command("taskkill", "/PID", strconv.Itoa(pid), "/T", "/F")
+			cmd.SysProcAttr = hiddenProcessAttributes()
+			if output, err := cmd.CombinedOutput(); err != nil {
+				return fmt.Errorf("failed to cleanup stale xray process %d: %w (%s)", pid, err, strings.TrimSpace(string(output)))
+			}
+			m.appendLogLocked(fmt.Sprintf("[%s] cleaned stale xray process (pid %d)", time.Now().Format(time.RFC3339), pid))
+		}
+
+		return nil
+	}
+
+	pids := map[int]struct{}{}
+	if byPort, err := findListeningProcessIDs(10808); err == nil {
+		for _, pid := range byPort {
+			for _, relatedPID := range collectRelatedUnixProcessIDs(pid, currentPID) {
+				pids[relatedPID] = struct{}{}
+			}
+		}
+	}
+	if byBinary, err := findUnixBinaryProcessIDs(m.binaryPath); err == nil {
+		for _, pid := range byBinary {
+			pids[pid] = struct{}{}
+		}
+	}
+
+	for pid := range pids {
 		if pid == 0 || pid == currentPID {
 			continue
 		}
-
-		cmd := exec.Command("taskkill", "/PID", strconv.Itoa(pid), "/T", "/F")
-		cmd.SysProcAttr = hiddenProcessAttributes()
-		if output, err := cmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("failed to cleanup stale xray process %d: %w (%s)", pid, err, strings.TrimSpace(string(output)))
+		if err := terminateUnixProcess(pid); err != nil {
+			return err
 		}
 		m.appendLogLocked(fmt.Sprintf("[%s] cleaned stale xray process (pid %d)", time.Now().Format(time.RFC3339), pid))
 	}
 
 	return nil
+}
+
+func collectRelatedUnixProcessIDs(pid int, currentPID int) []int {
+	if pid <= 0 || pid == currentPID {
+		return nil
+	}
+
+	collected := []int{pid}
+	parentPID, err := processParentPID(pid)
+	if err != nil {
+		return collected
+	}
+
+	for parentPID > 1 && parentPID != currentPID {
+		cmdline, err := processCommandLine(parentPID)
+		if err != nil {
+			break
+		}
+		lower := strings.ToLower(cmdline)
+		if strings.Contains(lower, "v2rayn") || strings.Contains(lower, "sing-box") {
+			collected = append(collected, parentPID)
+		}
+		nextParent, err := processParentPID(parentPID)
+		if err != nil || nextParent == parentPID {
+			break
+		}
+		parentPID = nextParent
+	}
+
+	slices.Reverse(collected)
+	return collected
 }
 
 func findBinaryProcessIDs(binaryPath string) ([]int, error) {
@@ -711,6 +782,136 @@ func findBinaryProcessIDs(binaryPath string) ([]int, error) {
 	}
 
 	return pids, nil
+}
+
+func findListeningProcessIDs(port int) ([]int, error) {
+	cmd := exec.Command("ss", "-lptn", fmt.Sprintf("sport = :%d", port))
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, err
+	}
+
+	matches := regexp.MustCompile(`pid=(\d+)`).FindAllStringSubmatch(string(output), -1)
+	pids := make([]int, 0, len(matches))
+	seen := map[int]struct{}{}
+	for _, match := range matches {
+		pid, err := strconv.Atoi(match[1])
+		if err != nil {
+			continue
+		}
+		if _, exists := seen[pid]; exists {
+			continue
+		}
+		seen[pid] = struct{}{}
+		pids = append(pids, pid)
+	}
+
+	return pids, nil
+}
+
+func findUnixBinaryProcessIDs(binaryPath string) ([]int, error) {
+	cmd := exec.Command("pgrep", "-f", binaryPath)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	pids := make([]int, 0, len(lines))
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		pid, err := strconv.Atoi(line)
+		if err != nil {
+			continue
+		}
+		pids = append(pids, pid)
+	}
+	return pids, nil
+}
+
+func processParentPID(pid int) (int, error) {
+	cmd := exec.Command("ps", "-o", "ppid=", "-p", strconv.Itoa(pid))
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return 0, err
+	}
+	value := strings.TrimSpace(string(output))
+	if value == "" {
+		return 0, nil
+	}
+	return strconv.Atoi(value)
+}
+
+func processCommandLine(pid int) (string, error) {
+	cmd := exec.Command("ps", "-o", "args=", "-p", strconv.Itoa(pid))
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(output)), nil
+}
+
+func terminateUnixProcess(pid int) error {
+	if pid <= 0 {
+		return nil
+	}
+
+	kill := func(signal string, elevated bool) ([]byte, error) {
+		args := []string{"-" + signal, strconv.Itoa(pid)}
+		if elevated {
+			cmd, err := platform.CommandAsRoot("kill", args...)
+			if err != nil {
+				return nil, err
+			}
+			return cmd.CombinedOutput()
+		}
+		return exec.Command("kill", args...).CombinedOutput()
+	}
+
+	if _, err := kill("TERM", false); err == nil {
+		if waitForPortRelease(10808, pid, 800*time.Millisecond) {
+			return nil
+		}
+	}
+	if _, err := kill("TERM", true); err == nil {
+		if waitForPortRelease(10808, pid, 1200*time.Millisecond) {
+			return nil
+		}
+	}
+	if output, err := kill("KILL", true); err != nil {
+		return fmt.Errorf("failed to cleanup stale xray process %d: %w (%s)", pid, err, strings.TrimSpace(string(output)))
+	}
+	if !waitForPortRelease(10808, pid, 1200*time.Millisecond) {
+		return fmt.Errorf("stale xray process %d did not release port 10808", pid)
+	}
+	return nil
+}
+
+func waitForPortRelease(port int, pid int, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		pids, err := findListeningProcessIDs(port)
+		if err == nil {
+			stillListening := false
+			for _, current := range pids {
+				if current == pid {
+					stillListening = true
+					break
+				}
+			}
+			if !stillListening {
+				return true
+			}
+		}
+		time.Sleep(120 * time.Millisecond)
+	}
+	return false
 }
 
 func (m *Manager) applySystemProxyLocked(cfg config.AppConfig) error {

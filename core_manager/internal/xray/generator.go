@@ -60,14 +60,9 @@ func BuildWithOptions(cfg config.AppConfig, opts BuildOptions) Config {
 		}
 	}
 
-	dnsServers := []string{"1.1.1.1", "8.8.8.8"}
-	if cfg.DNSMode == config.DNSDirect {
-		dnsServers = []string{"localhost"}
-	}
-
 	return Config{
 		"log":      map[string]any{"loglevel": "warning"},
-		"dns":      map[string]any{"servers": dnsServers},
+		"dns":      buildDNS(cfg),
 		"inbounds": buildInbounds(cfg, opts),
 		"outbounds": []map[string]any{
 			buildProxyOutbound(activeProfile, opts.BindInterface),
@@ -79,6 +74,53 @@ func BuildWithOptions(cfg config.AppConfig, opts BuildOptions) Config {
 			"rules":          rules,
 		},
 	}
+}
+
+func buildDNS(cfg config.AppConfig) map[string]any {
+	if cfg.RulesProfile == config.RulesProfileRussia {
+		servers := make([]any, 0, 8)
+
+		if len(cfg.ProxyDomains) > 0 {
+			servers = append(servers, dnsServer("1.1.1.1", cfg.ProxyDomains, nil))
+		}
+		if len(cfg.DirectDomains) > 0 {
+			servers = append(servers, dnsServer("localhost", cfg.DirectDomains, []string{"geoip:private", "geoip:ru"}))
+		}
+
+		servers = append(servers,
+			dnsServer("1.1.1.1", []string{"geosite:ru-blocked"}, nil),
+			dnsServer("localhost", []string{"geosite:private"}, []string{"geoip:private"}),
+			dnsServer("localhost", []string{"geosite:ru-available-only-inside"}, []string{"geoip:ru"}),
+			dnsServer("localhost", []string{"regexp:(^|\\.).*\\.ru$", "regexp:(^|\\.).*\\.xn--p1ai$"}, []string{"geoip:ru"}),
+			"1.1.1.1",
+			"8.8.8.8",
+		)
+
+		return map[string]any{
+			"servers": servers,
+		}
+	}
+
+	dnsServers := []string{"1.1.1.1", "8.8.8.8"}
+	if cfg.DNSMode == config.DNSDirect {
+		dnsServers = []string{"localhost"}
+	}
+
+	return map[string]any{"servers": dnsServers}
+}
+
+func dnsServer(address string, domains []string, expectIPs []string) map[string]any {
+	server := map[string]any{
+		"address":      address,
+		"skipFallback": true,
+	}
+	if len(domains) > 0 {
+		server["domains"] = domains
+	}
+	if len(expectIPs) > 0 {
+		server["expectIPs"] = expectIPs
+	}
+	return server
 }
 
 func appendRussiaSmartRules(rules []map[string]any, cfg config.AppConfig) []map[string]any {

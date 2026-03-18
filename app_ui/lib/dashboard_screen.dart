@@ -469,6 +469,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
       return;
     }
 
+    if (connection == ConnectionStateValue.disconnected &&
+        tunnelMode == TunnelMode.vpn) {
+      final elevated = await _ensureAdminForTun();
+      if (!elevated) {
+        return;
+      }
+    }
+
     setState(() {
       isBusy = true;
       isConnecting = connection == ConnectionStateValue.disconnected;
@@ -553,6 +561,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
       return true;
     }
 
+    if (Platform.isLinux) {
+      final password = await _showLinuxSudoDialog();
+      if (password == null || password.isEmpty) {
+        return false;
+      }
+
+      try {
+        await backend.requestAdmin(password);
+        final snapshot = await backend.getState();
+        if (!mounted) {
+          return false;
+        }
+        setState(() {
+          _applySnapshot(snapshot);
+          errorMessage = null;
+        });
+        return true;
+      } catch (error) {
+        if (mounted) {
+          _showMessage(error.toString(), isError: true);
+        }
+        return false;
+      }
+    }
+
     try {
       await backend.requestAdmin();
     } catch (error) {
@@ -596,6 +629,53 @@ class _DashboardScreenState extends State<DashboardScreen> {
           isError: true);
     }
     return false;
+  }
+
+  Future<String?> _showLinuxSudoDialog() async {
+    final controller = TextEditingController();
+    try {
+      return await showDialog<String>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) {
+          return AlertDialog(
+            title: const Text('Administrator access required'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'VPN (TUN) on Linux needs sudo to start Xray and configure routes. The password is kept only in memory until the app is restarted.',
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: controller,
+                  obscureText: true,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Password',
+                    border: OutlineInputBorder(),
+                  ),
+                  onSubmitted: (_) => Navigator.of(context).pop(controller.text),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(controller.text),
+                child: const Text('Continue'),
+              ),
+            ],
+          );
+        },
+      );
+    } finally {
+      controller.dispose();
+    }
   }
 
   void _applySnapshot(DashboardSnapshot snapshot) {

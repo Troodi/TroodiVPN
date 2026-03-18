@@ -3,9 +3,15 @@
 package platform
 
 import (
+	"errors"
 	"fmt"
 	"net"
+	"os"
 	"os/exec"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
 )
 
 type ProxySettings struct {
@@ -54,12 +60,61 @@ type TUNState struct {
 	BypassCIDRs    []string
 }
 
+var linuxElevationState struct {
+	mu       sync.RWMutex
+	password string
+}
+
 func IsElevated() bool {
-	return true
+	if os.Geteuid() == 0 {
+		return true
+	}
+	linuxElevationState.mu.RLock()
+	defer linuxElevationState.mu.RUnlock()
+	return linuxElevationState.password != ""
 }
 
 func RequestElevation(executablePath, workingDirectory string) error {
+	return errors.New("sudo password is required on Linux")
+}
+
+func SetElevationSecret(secret string) error {
+	secret = strings.TrimSpace(secret)
+	if secret == "" {
+		return errors.New("sudo password is required")
+	}
+
+	if os.Geteuid() == 0 {
+		return nil
+	}
+
+	if err := validateSudoPassword(secret); err != nil {
+		return err
+	}
+
+	linuxElevationState.mu.Lock()
+	linuxElevationState.password = secret
+	linuxElevationState.mu.Unlock()
 	return nil
+}
+
+func CommandAsRoot(name string, args ...string) (*exec.Cmd, error) {
+	if os.Geteuid() == 0 {
+		return exec.Command(name, args...), nil
+	}
+
+	linuxElevationState.mu.RLock()
+	password := linuxElevationState.password
+	linuxElevationState.mu.RUnlock()
+	if password == "" {
+		return nil, errors.New("sudo password is not available")
+	}
+
+	sudoArgs := []string{"-S", "-p", "", "--preserve-env=xray.location.asset", "--", name}
+	sudoArgs = append(sudoArgs, args...)
+	cmd := exec.Command("sudo", sudoArgs...)
+	cmd.Stdin = strings.NewReader(password + "\n")
+	return cmd, nil
 }
 
 func CaptureSystemProxy() (*ProxySettings, error) {
@@ -209,11 +264,40 @@ func EnsureWintunDLL(xrayBinaryPath string) error {
 }
 
 func CaptureDefaultRoute() (*DefaultRoute, error) {
-	return &DefaultRoute{
-		InterfaceAlias: "default",
-		InterfaceIndex: 1,
-		NextHop:        "",
-	}, nil
+	output, err := exec.Command("ip", "route", "show", "default").CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("failed to inspect default route: %w (%s)", err, trimTrailingNewline(output))
+	}
+
+	line := strings.TrimSpace(string(output))
+	if idx := strings.IndexByte(line, '\n'); idx >= 0 {
+		line = strings.TrimSpace(line[:idx])
+	}
+	if line == "" {
+		return nil, errors.New("default route is not available")
+	}
+
+	fields := strings.Fields(line)
+	result := &DefaultRoute{}
+	for i := 0; i < len(fields); i++ {
+		switch fields[i] {
+		case "via":
+			if i+1 < len(fields) {
+				result.NextHop = fields[i+1]
+				i++
+			}
+		case "dev":
+			if i+1 < len(fields) {
+				result.InterfaceAlias = fields[i+1]
+				i++
+			}
+		}
+	}
+
+	if result.InterfaceAlias == "" {
+		return nil, fmt.Errorf("failed to parse default route: %s", line)
+	}
+	return result, nil
 }
 
 func DefaultTUNOptions() TUNOptions {
@@ -228,7 +312,7 @@ func DefaultTUNOptions() TUNOptions {
 }
 
 func PrepareTUN(opts TUNOptions) (*TUNState, error) {
-	return &TUNState{
+	state := &TUNState{
 		InterfaceAlias: opts.InterfaceAlias,
 		InterfaceIndex: 1,
 		IPAddress:      opts.IPAddress,
@@ -236,15 +320,77 @@ func PrepareTUN(opts TUNOptions) (*TUNState, error) {
 		DNSServers:     append([]string(nil), opts.DNSServers...),
 		RoutePrefixes:  []string{"0.0.0.0/1", "128.0.0.0/1"},
 		BypassCIDRs:    append([]string(nil), opts.BypassCIDRs...),
-	}, nil
+	}
+
+	if err := waitForInterface(opts.InterfaceAlias, 3*time.Second); err != nil {
+		return nil, err
+	}
+	if err := runRoot("ip", "link", "set", "dev", opts.InterfaceAlias, "up"); err != nil {
+		return nil, err
+	}
+	if opts.MTU > 0 {
+		if err := runRoot("ip", "link", "set", "dev", opts.InterfaceAlias, "mtu", strconv.Itoa(opts.MTU)); err != nil {
+			return nil, err
+		}
+	}
+	if opts.IPAddress != "" && opts.PrefixLength > 0 {
+		if err := runRoot("ip", "addr", "replace", fmt.Sprintf("%s/%d", opts.IPAddress, opts.PrefixLength), "dev", opts.InterfaceAlias); err != nil {
+			return nil, err
+		}
+	}
+
+	if opts.ManageRoutes {
+		for _, prefix := range state.RoutePrefixes {
+			if err := runRoot("ip", "route", "replace", prefix, "dev", opts.InterfaceAlias); err != nil {
+				return nil, err
+			}
+		}
+
+		for _, cidr := range state.BypassCIDRs {
+			args := []string{"route", "replace", cidr}
+			if opts.DefaultRoute != nil && opts.DefaultRoute.NextHop != "" {
+				args = append(args, "via", opts.DefaultRoute.NextHop)
+			}
+			if opts.DefaultRoute != nil && opts.DefaultRoute.InterfaceAlias != "" {
+				args = append(args, "dev", opts.DefaultRoute.InterfaceAlias)
+			}
+			if err := runRoot("ip", args...); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	return state, nil
 }
 
 func CleanupTUN(state *TUNState) error {
+	if state == nil {
+		return nil
+	}
+
+	for _, prefix := range state.RoutePrefixes {
+		_ = runRoot("ip", "route", "del", prefix, "dev", state.InterfaceAlias)
+	}
+	for _, cidr := range state.BypassCIDRs {
+		_ = runRoot("ip", "route", "del", cidr)
+	}
+	if state.IPAddress != "" && state.PrefixLength > 0 {
+		_ = runRoot("ip", "addr", "del", fmt.Sprintf("%s/%d", state.IPAddress, state.PrefixLength), "dev", state.InterfaceAlias)
+	}
 	return nil
 }
 
 func IsTUNSupported() bool {
 	return true
+}
+
+func validateSudoPassword(password string) error {
+	cmd := exec.Command("sudo", "-S", "-k", "-p", "", "true")
+	cmd.Stdin = strings.NewReader(password + "\n")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("sudo authentication failed: %s", trimTrailingNewline(output))
+	}
+	return nil
 }
 
 func getGSetting(schema, key string) (string, error) {
@@ -272,4 +418,26 @@ func trimTrailingNewline(value []byte) []byte {
 		value = value[:len(value)-1]
 	}
 	return value
+}
+
+func runRoot(name string, args ...string) error {
+	cmd, err := CommandAsRoot(name, args...)
+	if err != nil {
+		return err
+	}
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("%s %s failed: %w (%s)", name, strings.Join(args, " "), err, trimTrailingNewline(output))
+	}
+	return nil
+}
+
+func waitForInterface(name string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if _, err := exec.Command("ip", "link", "show", "dev", name).CombinedOutput(); err == nil {
+			return nil
+		}
+		time.Sleep(150 * time.Millisecond)
+	}
+	return fmt.Errorf("tun interface %s did not appear", name)
 }

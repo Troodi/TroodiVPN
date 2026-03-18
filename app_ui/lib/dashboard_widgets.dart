@@ -2,6 +2,7 @@ part of 'main.dart';
 
 class _Sidebar extends StatelessWidget {
   const _Sidebar({
+    required this.language,
     required this.connection,
     required this.isConnecting,
     required this.routingMode,
@@ -13,9 +14,11 @@ class _Sidebar extends StatelessWidget {
     required this.hasActiveProfile,
     required this.activeProfileName,
     required this.selectedPage,
+    required this.onLanguageChanged,
     required this.onSelect,
   });
 
+  final AppLanguage language;
   final ConnectionStateValue connection;
   final bool isConnecting;
   final RoutingMode routingMode;
@@ -27,15 +30,28 @@ class _Sidebar extends StatelessWidget {
   final bool hasActiveProfile;
   final String activeProfileName;
   final AppPage selectedPage;
+  final ValueChanged<AppLanguage> onLanguageChanged;
   final ValueChanged<AppPage> onSelect;
 
   @override
   Widget build(BuildContext context) {
-    const items = [
-      (AppPage.home, 'Home', Icons.home_filled),
-      (AppPage.profiles, 'Profiles', Icons.folder_shared_outlined),
-      (AppPage.rules, 'Rules', Icons.account_tree_outlined),
-      (AppPage.settings, 'Settings', Icons.settings_rounded),
+    final items = [
+      (AppPage.home, loc(language, 'Home', 'Главная'), Icons.home_filled),
+      (
+        AppPage.profiles,
+        loc(language, 'Profiles', 'Профили'),
+        Icons.folder_shared_outlined
+      ),
+      (
+        AppPage.rules,
+        loc(language, 'Rules', 'Правила'),
+        Icons.account_tree_outlined
+      ),
+      (
+        AppPage.settings,
+        loc(language, 'Settings', 'Настройки'),
+        Icons.settings_rounded
+      ),
     ];
 
     return Container(
@@ -91,8 +107,13 @@ class _Sidebar extends StatelessWidget {
             const SizedBox(height: 8),
           ],
           const Spacer(),
+          _LanguageSwitcher(
+            value: language,
+            onChanged: onLanguageChanged,
+          ),
+          const SizedBox(height: 8),
           _SidebarInfoCard(
-            title: 'Connection info',
+            title: loc(language, 'Connection info', 'Информация о подключении'),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -114,10 +135,10 @@ class _Sidebar extends StatelessWidget {
                     const SizedBox(width: 8),
                     Text(
                       isConnecting
-                          ? 'Connecting'
+                          ? loc(language, 'Connecting', 'Подключение')
                           : connection == ConnectionStateValue.connected
-                              ? 'Connected'
-                              : 'Disconnected',
+                              ? loc(language, 'Connected', 'Подключено')
+                              : loc(language, 'Disconnected', 'Отключено'),
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
@@ -128,14 +149,18 @@ class _Sidebar extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 _StatusRow(
-                  label: 'Ping',
-                  value: latencyMs > 0 ? '$latencyMs ms' : 'n/a',
+                  label: loc(language, 'Ping', 'Пинг'),
+                  value: latencyMs > 0
+                      ? '$latencyMs ms'
+                      : loc(language, 'n/a', 'н/д'),
                   dark: true,
                 ),
                 const SizedBox(height: 8),
                 _StatusRow(
                   label: 'IP',
-                  value: externalIp.isEmpty ? 'n/a' : externalIp,
+                  value: externalIp.isEmpty
+                      ? loc(language, 'n/a', 'н/д')
+                      : externalIp,
                   dark: true,
                 ),
               ],
@@ -143,7 +168,7 @@ class _Sidebar extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           _SidebarInfoCard(
-            title: 'Network activity',
+            title: loc(language, 'Network activity', 'Сетевая активность'),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -190,7 +215,8 @@ class _Sidebar extends StatelessWidget {
                       child: Text(
                         hasActiveProfile
                             ? activeProfileName
-                            : 'No profile selected',
+                            : loc(language, 'No profile selected',
+                                'Профиль не выбран'),
                         style: const TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
@@ -203,8 +229,12 @@ class _Sidebar extends StatelessWidget {
                 const SizedBox(height: 14),
                 Text(
                   hasActiveProfile
-                      ? 'Routing: ${routingMode.name} • DNS: ${dnsMode.name.toUpperCase()}'
-                      : 'Open Profiles, import or create a profile, then select it on this screen.',
+                      ? '${tr('Routing', 'Маршрутизация')}: ${routingMode.name} • DNS: ${dnsMode.name.toUpperCase()}'
+                      : loc(
+                          language,
+                          'Open Profiles, import or create a profile, then select it on this screen.',
+                          'Откройте Профили, импортируйте или создайте профиль, затем выберите его на этом экране.',
+                        ),
                   style: TextStyle(
                     height: 1.45,
                     fontSize: 13,
@@ -356,9 +386,9 @@ class _HomeInfoSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final cards = [
       _MetricCard(
-        label: 'Endpoint',
+        label: tr('Endpoint', 'Адрес'),
         value: profile.address.isEmpty
-            ? 'Not configured'
+            ? tr('Not configured', 'Не настроено')
             : '${profile.address}:${profile.port}',
         accent: const Color(0xFF173C4A),
       ),
@@ -368,9 +398,9 @@ class _HomeInfoSection extends StatelessWidget {
         accent: const Color(0xFF6E5D46),
       ),
       _MetricCard(
-        label: 'Routing',
+        label: tr('Routing', 'Маршрутизация'),
         value:
-            '${routingMode.name} / ${tunEnabled ? 'TUN' : systemProxyEnabled ? 'Proxy' : 'Manual'}',
+            '${routingMode.name} / ${tunEnabled ? 'TUN' : systemProxyEnabled ? tr('Proxy', 'Прокси') : tr('Manual', 'Вручную')}',
         accent: const Color(0xFF2C7A5D),
       ),
     ];
@@ -480,18 +510,20 @@ class _ProfileDetailsCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Profile details',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+            Text(tr('Profile details', 'Детали профиля'),
+                style:
+                    const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
             const SizedBox(height: 8),
-            _StatusRow(label: 'Name', value: profile.name),
+            _StatusRow(label: tr('Name', 'Имя'), value: profile.name),
             const SizedBox(height: 10),
             _StatusRow(
-                label: 'Protocol', value: profile.protocol.toUpperCase()),
+                label: tr('Protocol', 'Протокол'),
+                value: profile.protocol.toUpperCase()),
             const SizedBox(height: 10),
             _StatusRow(
-              label: 'Address',
+              label: tr('Address', 'Адрес'),
               value: profile.address.isEmpty
-                  ? 'Not specified'
+                  ? tr('Not specified', 'Не указано')
                   : '${profile.address}:${profile.port}',
             ),
             const SizedBox(height: 10),
@@ -501,12 +533,14 @@ class _ProfileDetailsCard extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             _StatusRow(
-              label: 'Security',
-              value: profile.security.isEmpty ? 'Auto' : profile.security,
+              label: tr('Security', 'Безопасность'),
+              value: profile.security.isEmpty
+                  ? tr('Auto', 'Авто')
+                  : profile.security,
             ),
             const SizedBox(height: 10),
             _StatusRow(
-              label: 'Transport',
+              label: tr('Transport', 'Транспорт'),
               value: profile.transport.isEmpty ? 'tcp' : profile.transport,
             ),
             const SizedBox(height: 10),
@@ -516,7 +550,7 @@ class _ProfileDetailsCard extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             _StatusRow(
-              label: 'Fingerprint',
+              label: tr('Fingerprint', 'Fingerprint'),
               value: profile.fingerprint.isEmpty
                   ? 'Not specified'
                   : profile.fingerprint,
@@ -538,12 +572,12 @@ class _ProfileDetailsCard extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             _StatusRow(
-              label: 'Credential',
+              label: tr('Credential', 'Учетные данные'),
               value: profile.userId.isNotEmpty
                   ? profile.userId
                   : profile.password.isNotEmpty
                       ? profile.password
-                      : 'Not specified',
+                      : tr('Not specified', 'Не указано'),
             ),
             if (profile.rawLink.isNotEmpty) ...[
               const SizedBox(height: 16),
@@ -708,10 +742,10 @@ class _MainConnectionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final connected = connection == ConnectionStateValue.connected;
     final statusLabel = isConnecting
-        ? 'CONNECTING'
+        ? tr('CONNECTING', 'ПОДКЛЮЧЕНИЕ')
         : connected
-            ? 'CONNECTED'
-            : 'DISCONNECTED';
+            ? tr('CONNECTED', 'ПОДКЛЮЧЕНО')
+            : tr('DISCONNECTED', 'ОТКЛЮЧЕНО');
     final statusColor = isConnecting
         ? const Color(0xFF8FA4FF)
         : connected
@@ -779,8 +813,9 @@ class _MainConnectionCard extends StatelessWidget {
             child: ConstrainedBox(
               constraints: BoxConstraints(maxWidth: bottomCardWidth),
               child: _ServerSelectCard(
-                selectedName:
-                    profileItems.isEmpty ? 'No servers yet' : profileName,
+                selectedName: profileItems.isEmpty
+                    ? tr('No servers yet', 'Серверов пока нет')
+                    : profileName,
                 selectedProfileId: selectedProfileId,
                 profileItems: profileItems,
                 onProfileChanged: onProfileChanged,
@@ -806,8 +841,10 @@ class _MainConnectionCard extends StatelessWidget {
               constraints: BoxConstraints(maxWidth: bottomCardWidth),
               child: Text(
                 tunnelMode == TunnelMode.vpn
-                    ? 'VPN: protects all applications.'
-                    : 'Proxy: for selected apps only.',
+                    ? tr('VPN: protects all applications.',
+                        'VPN: защищает все приложения.')
+                    : tr('Proxy: for selected apps only.',
+                        'Прокси: только для выбранных приложений.'),
                 style: TextStyle(
                   color: AppPalette.homeTextMuted.withValues(alpha: 0.82),
                   fontSize: 13,
@@ -908,7 +945,7 @@ class _ServerSelectCard extends StatelessWidget {
                           ),
                           const SizedBox(width: 8),
                           Text(
-                            'Select VPN Server',
+                            tr('Select VPN Server', 'Выберите VPN-сервер'),
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.w700,
@@ -1148,7 +1185,7 @@ class _TunnelModeToggle extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  isVpn ? 'VPN' : 'Proxy',
+                  isVpn ? 'VPN' : tr('Proxy', 'Прокси'),
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 18,
@@ -1191,7 +1228,7 @@ class _TunnelModeToggle extends StatelessWidget {
               ),
               Expanded(
                 child: _ModeSegment(
-                  label: 'Proxy',
+                  label: tr('Proxy', 'Прокси'),
                   icon: Icons.web_asset_rounded,
                   selected: !isVpn,
                   onTap: () => onChanged(TunnelMode.proxy),
@@ -1340,7 +1377,7 @@ class _RulesModeCard extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  'Routing mode',
+                  tr('Routing mode', 'Режим маршрутизации'),
                   style: TextStyle(
                     color: AppPalette.homeText.withValues(alpha: 0.96),
                     fontSize: 18,
@@ -1359,7 +1396,7 @@ class _RulesModeCard extends StatelessWidget {
                   ),
                 ),
                 child: Text(
-                  'Active mode',
+                  tr('Active mode', 'Активный режим'),
                   style: TextStyle(
                     color: AppPalette.homeText.withValues(alpha: 0.94),
                     fontSize: 11,
@@ -1382,17 +1419,17 @@ class _RulesModeCard extends StatelessWidget {
               runSpacing: 8,
               children: [
                 _ModeChoiceChip(
-                  label: 'Protect all traffic',
+                  label: tr('Protect all traffic', 'Защищать весь трафик'),
                   selected: routingMode == RoutingMode.global,
                   onTap: () => onModeChanged(RoutingMode.global),
                 ),
                 _ModeChoiceChip(
-                  label: 'Only selected sites',
+                  label: tr('Only selected sites', 'Только выбранные сайты'),
                   selected: routingMode == RoutingMode.whitelist,
                   onTap: () => onModeChanged(RoutingMode.whitelist),
                 ),
                 _ModeChoiceChip(
-                  label: 'Exclude sites',
+                  label: tr('Exclude sites', 'Исключить сайты'),
                   selected: routingMode == RoutingMode.blacklist,
                   onTap: () => onModeChanged(RoutingMode.blacklist),
                 ),
@@ -1410,7 +1447,7 @@ class _RulesModeCard extends StatelessWidget {
           ),
           const SizedBox(height: 18),
           Text(
-            'Traffic profile',
+            tr('Traffic profile', 'Профиль трафика'),
             style: TextStyle(
               color: AppPalette.homeText.withValues(alpha: 0.95),
               fontSize: 15,
@@ -1428,7 +1465,7 @@ class _RulesModeCard extends StatelessWidget {
                 onTap: () => onProfileChanged(RulesProfile.global),
               ),
               _ProfileChoiceChip(
-                label: 'Russia (Smart)',
+                label: tr('Russia (Smart)', 'Россия (умный)'),
                 selected: rulesProfile == RulesProfile.russia,
                 onTap: () => onProfileChanged(RulesProfile.russia),
               ),
@@ -1445,8 +1482,14 @@ class _RulesModeCard extends StatelessWidget {
             ),
             child: Text(
               rulesProfile == RulesProfile.russia
-                  ? 'Russia (Smart): resources blocked in Russia go through VPN, Russian and Russia-only destinations open directly, local/private IPs stay direct, and your manual rules still apply on top.'
-                  : 'Global profile: only your current mode and manual rules are used, without a regional preset.',
+                  ? tr(
+                      'Russia (Smart): resources blocked in Russia go through VPN, Russian and Russia-only destinations open directly, local/private IPs stay direct, and your manual rules still apply on top.',
+                      'Россия (умный): ресурсы, заблокированные в России, идут через VPN, российские и доступные только из России адреса открываются напрямую, локальные и приватные IP остаются прямыми, а ваши ручные правила применяются поверх этого.',
+                    )
+                  : tr(
+                      'Global profile: only your current mode and manual rules are used, without a regional preset.',
+                      'Профиль Global: используется только текущий режим и ваши ручные правила, без регионального пресета.',
+                    ),
               style: TextStyle(
                 color: AppPalette.homeTextMuted.withValues(alpha: 0.82),
                 fontSize: 13,
@@ -1699,7 +1742,7 @@ class _RuleTesterCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Test domain / IP',
+            tr('Test domain / IP', 'Проверка домена / IP'),
             style: TextStyle(
               color: AppPalette.homeText.withValues(alpha: 0.96),
               fontSize: 18,
@@ -1730,7 +1773,7 @@ class _RuleTesterCard extends StatelessWidget {
               const SizedBox(width: 10),
               FilledButton(
                 onPressed: onChanged,
-                child: const Text('Test'),
+                child: Text(tr('Test', 'Проверить')),
               ),
             ],
           ),
@@ -1766,8 +1809,8 @@ class _RuleTesterCard extends StatelessWidget {
                   const SizedBox(height: 6),
                   Text(
                     result.hasMatch
-                        ? 'Matched rule: ${result.matchedRule}'
-                        : 'No matching rules',
+                        ? '${tr('Matched rule', 'Совпавшее правило')}: ${result.matchedRule}'
+                        : tr('No matching rules', 'Совпадений нет'),
                     style: TextStyle(
                       color: AppPalette.homeTextMuted.withValues(alpha: 0.82),
                       fontSize: 13,
@@ -2179,11 +2222,20 @@ class _RuleTestResult {
 String _modeExplanation(RoutingMode mode) {
   switch (mode) {
     case RoutingMode.global:
-      return 'All traffic goes through VPN except sites listed in Open normally.';
+      return tr(
+        'All traffic goes through VPN except sites listed in Open normally.',
+        'Весь трафик идёт через VPN, кроме сайтов из списка «Открывать напрямую».',
+      );
     case RoutingMode.whitelist:
-      return 'Only sites listed in Via VPN use the VPN tunnel.';
+      return tr(
+        'Only sites listed in Via VPN use the VPN tunnel.',
+        'Только сайты из списка «Через VPN» используют VPN-туннель.',
+      );
     case RoutingMode.blacklist:
-      return 'All traffic goes through VPN except selected exclusions.';
+      return tr(
+        'All traffic goes through VPN except selected exclusions.',
+        'Весь трафик идёт через VPN, кроме выбранных исключений.',
+      );
   }
 }
 
@@ -2222,7 +2274,7 @@ class _TrafficBehaviorCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Traffic behavior',
+                      tr('Traffic behavior', 'Поведение трафика'),
                       style: TextStyle(
                         color: AppPalette.homeText.withValues(alpha: 0.96),
                         fontSize: 18,
@@ -2244,7 +2296,7 @@ class _TrafficBehaviorCard extends StatelessWidget {
               FilledButton.tonalIcon(
                 onPressed: onViewDetails,
                 icon: const Icon(Icons.account_tree_outlined, size: 16),
-                label: const Text('View details'),
+                label: Text(tr('View details', 'Подробнее')),
                 style: FilledButton.styleFrom(
                   backgroundColor:
                       AppPalette.homeAccent.withValues(alpha: 0.16),
@@ -2312,7 +2364,8 @@ class _RoutingDetailsDialog extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Traffic behavior details',
+                          tr('Traffic behavior details',
+                              'Детали поведения трафика'),
                           style: TextStyle(
                             color: AppPalette.homeText.withValues(alpha: 0.96),
                             fontSize: 22,
@@ -2383,8 +2436,8 @@ class _RoutingDiagram extends StatelessWidget {
               Align(
                 alignment: const Alignment(0, -0.90),
                 child: _RoutingNode(
-                  title: 'Internet',
-                  subtitle: 'Incoming traffic',
+                  title: tr('Internet', 'Интернет'),
+                  subtitle: tr('Incoming traffic', 'Входящий трафик'),
                   accent: const Color(0xFF7AD4FF),
                   icon: Icons.public_rounded,
                   compact: true,
@@ -2404,16 +2457,18 @@ class _RoutingDiagram extends StatelessWidget {
                 bottom: 8,
                 width: hasBlocked ? width * 0.31 : width * 0.42,
                 child: _RoutingBranch(
-                  title: 'Open normally',
+                  title: tr('Open normally', 'Открывать напрямую'),
                   subtitle: routingMode == RoutingMode.whitelist
-                      ? 'Everything else bypasses VPN'
-                      : 'Selected exclusions bypass VPN',
+                      ? tr('Everything else bypasses VPN',
+                          'Всё остальное идёт напрямую')
+                      : tr('Selected exclusions bypass VPN',
+                          'Выбранные исключения идут напрямую'),
                   accent: const Color(0xFF97A8FF),
                   icon: Icons.open_in_browser_rounded,
                   rules: directRules,
                   emptyLabel: routingMode == RoutingMode.whitelist
-                      ? 'All other traffic'
-                      : 'No direct exclusions',
+                      ? tr('All other traffic', 'Весь остальной трафик')
+                      : tr('No direct exclusions', 'Нет прямых исключений'),
                 ),
               ),
               Positioned(
@@ -2421,16 +2476,18 @@ class _RoutingDiagram extends StatelessWidget {
                 bottom: 8,
                 width: hasBlocked ? width * 0.31 : width * 0.42,
                 child: _RoutingBranch(
-                  title: 'VPN tunnel',
+                  title: tr('VPN tunnel', 'VPN-туннель'),
                   subtitle: routingMode == RoutingMode.whitelist
-                      ? 'Only selected rules use VPN'
-                      : 'All remaining traffic uses VPN',
+                      ? tr('Only selected rules use VPN',
+                          'Только выбранные правила используют VPN')
+                      : tr('All remaining traffic uses VPN',
+                          'Весь остальной трафик использует VPN'),
                   accent: const Color(0xFF6BD7AE),
                   icon: Icons.shield_rounded,
                   rules: vpnRules,
                   emptyLabel: routingMode == RoutingMode.whitelist
-                      ? 'No selected sites yet'
-                      : 'All remaining traffic',
+                      ? tr('No selected sites yet', 'Пока нет выбранных сайтов')
+                      : tr('All remaining traffic', 'Весь остальной трафик'),
                 ),
               ),
               if (hasBlocked)
@@ -2439,12 +2496,13 @@ class _RoutingDiagram extends StatelessWidget {
                   bottom: 8,
                   width: width * 0.31,
                   child: _RoutingBranch(
-                    title: 'Blocked',
-                    subtitle: 'Traffic is dropped',
+                    title: tr('Blocked', 'Заблокировано'),
+                    subtitle: tr('Traffic is dropped', 'Трафик блокируется'),
                     accent: const Color(0xFFFF9E8B),
                     icon: Icons.block_rounded,
                     rules: blockedRules,
-                    emptyLabel: 'No blocked rules',
+                    emptyLabel:
+                        tr('No blocked rules', 'Нет заблокированных правил'),
                   ),
                 ),
             ],
@@ -2725,7 +2783,7 @@ class _DomainTestCard extends StatelessWidget {
               const SizedBox(width: 12),
               FilledButton(
                 onPressed: onChanged,
-                child: const Text('Test'),
+                child: Text(tr('Test', 'Проверить')),
               ),
             ],
           ),
@@ -2775,16 +2833,16 @@ class _DomainTestCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 10),
                   _ResultRow(
-                    label: 'Matched rule',
+                    label: tr('Matched rule', 'Совпавшее правило'),
                     value: result.hasMatch
                         ? result.matchedRule
-                        : 'No matching rules',
+                        : tr('No matching rules', 'Совпадений нет'),
                   ),
                   if (!result.hasMatch &&
                       result.defaultBehavior.isNotEmpty) ...[
                     const SizedBox(height: 6),
                     _ResultRow(
-                      label: 'Default behavior',
+                      label: tr('Default behavior', 'Поведение по умолчанию'),
                       value: result.defaultBehavior,
                     ),
                   ],
@@ -2913,8 +2971,8 @@ class _RulesColumnCard extends StatelessWidget {
                   ),
                 ),
                 icon: const Icon(Icons.content_paste_rounded, size: 16),
-                label: const Text(
-                  'Paste list',
+                label: Text(
+                  tr('Paste list', 'Вставить список'),
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
@@ -2931,7 +2989,7 @@ class _RulesColumnCard extends StatelessWidget {
                 fontSize: 13,
               ),
               decoration: InputDecoration(
-                hintText: 'Search rules...',
+                hintText: tr('Search rules...', 'Поиск правил...'),
                 hintStyle: TextStyle(
                   color: AppPalette.homeTextMuted.withValues(alpha: 0.90),
                 ),
@@ -2942,7 +3000,7 @@ class _RulesColumnCard extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Text(
-              'Supported formats',
+              tr('Supported formats', 'Поддерживаемые форматы'),
               style: TextStyle(
                 color: AppPalette.homeTextMuted.withValues(alpha: 0.78),
                 fontSize: 11,
@@ -3146,14 +3204,14 @@ class _RuleListItem extends StatelessWidget {
           if (!isDragPreview)
             IconButton(
               splashRadius: 18,
-              tooltip: 'Delete rule',
+              tooltip: tr('Delete rule', 'Удалить правило'),
               onPressed: onDelete,
               icon: const Icon(Icons.delete_outline_rounded, size: 18),
               color: AppPalette.homeTextMuted.withValues(alpha: 0.86),
             ),
           IconButton(
             splashRadius: 18,
-            tooltip: 'Edit rule',
+            tooltip: tr('Edit rule', 'Редактировать правило'),
             onPressed: isDragPreview ? null : onEdit,
             icon: Icon(
               Icons.edit_outlined,
@@ -3212,7 +3270,8 @@ class _EditRuleDialogState extends State<_EditRuleDialog> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Edit rule in ${widget.title}',
+            tr('Edit rule in ${widget.title}',
+                'Редактировать правило в разделе ${widget.title}'),
             style: TextStyle(
               color: AppPalette.homeText.withValues(alpha: 0.96),
               fontSize: 20,
@@ -3291,7 +3350,8 @@ class _LinuxSudoDialog extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Administrator access required',
+            tr('Administrator access required',
+                'Требуются права администратора'),
             style: TextStyle(
               color: AppPalette.homeText.withValues(alpha: 0.96),
               fontSize: 22,
@@ -3315,7 +3375,7 @@ class _LinuxSudoDialog extends StatelessWidget {
               color: AppPalette.homeText.withValues(alpha: 0.94),
             ),
             decoration: InputDecoration(
-              labelText: 'Password',
+              labelText: tr('Password', 'Пароль'),
               labelStyle: TextStyle(
                 color: AppPalette.homeTextMuted.withValues(alpha: 0.82),
               ),
@@ -3334,7 +3394,7 @@ class _LinuxSudoDialog extends StatelessWidget {
               ),
               const SizedBox(width: 10),
               _DialogPrimaryButton(
-                label: 'Continue',
+                label: tr('Continue', 'Продолжить'),
                 onPressed: () => Navigator.of(context).pop(controller.text),
               ),
             ],
@@ -3419,7 +3479,8 @@ class _PasteListDialogState extends State<_PasteListDialog> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Paste list to ${widget.title}',
+            tr('Paste list to ${widget.title}',
+                'Вставить список в раздел ${widget.title}'),
             style: TextStyle(
               color: AppPalette.homeText.withValues(alpha: 0.96),
               fontSize: 20,
@@ -3547,7 +3608,7 @@ class _PasteListSummaryDialog extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Paste results',
+            tr('Paste results', 'Результат вставки'),
             style: TextStyle(
               color: AppPalette.homeText.withValues(alpha: 0.96),
               fontSize: 20,
@@ -3556,14 +3617,17 @@ class _PasteListSummaryDialog extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Text(
-            addedCount == 1 ? '1 rule added.' : '$addedCount rules added.',
+            addedCount == 1
+                ? tr('1 rule added.', 'Добавлено 1 правило.')
+                : tr('$addedCount rules added.',
+                    'Добавлено правил: $addedCount.'),
             style: TextStyle(
               color: AppPalette.homeText.withValues(alpha: 0.92),
             ),
           ),
           const SizedBox(height: 12),
           Text(
-            'Lines that need review',
+            tr('Lines that need review', 'Строки, требующие проверки'),
             style: TextStyle(
               color: AppPalette.homeTextMuted.withValues(alpha: 0.84),
               fontWeight: FontWeight.w700,
@@ -3600,7 +3664,7 @@ class _PasteListSummaryDialog extends StatelessWidget {
           Align(
             alignment: Alignment.centerRight,
             child: _DialogPrimaryButton(
-              label: 'Close',
+              label: tr('Close', 'Закрыть'),
               onPressed: () => Navigator.of(context).pop(),
             ),
           ),
@@ -3868,6 +3932,99 @@ class _TrafficStat extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _LanguageSwitcher extends StatelessWidget {
+  const _LanguageSwitcher({
+    required this.value,
+    required this.onChanged,
+  });
+
+  final AppLanguage value;
+  final ValueChanged<AppLanguage> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          loc(value, 'Language', 'Язык'),
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: AppPalette.homeText.withValues(alpha: 0.86),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: AppLanguage.values
+              .map(
+                (language) => Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.only(
+                      right: language == AppLanguage.values.first ? 8 : 0,
+                    ),
+                    child: MouseRegion(
+                      cursor: SystemMouseCursors.click,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(16),
+                        onTap: () => onChanged(language),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 160),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 12,
+                          ),
+                          decoration: BoxDecoration(
+                            gradient: value == language
+                                ? const LinearGradient(
+                                    colors: [
+                                      AppPalette.homeAccent,
+                                      AppPalette.homeAccentStrong,
+                                    ],
+                                  )
+                                : null,
+                            color: value == language
+                                ? null
+                                : Colors.white.withValues(alpha: 0.06),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: value == language
+                                  ? Colors.white.withValues(alpha: 0.18)
+                                  : Colors.white.withValues(alpha: 0.08),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(language.flag,
+                                  style: const TextStyle(fontSize: 16)),
+                              const SizedBox(width: 8),
+                              Text(
+                                language.shortLabel,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: value == language
+                                      ? Colors.white
+                                      : AppPalette.homeText
+                                          .withValues(alpha: 0.86),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              )
+              .toList(growable: false),
+        ),
+      ],
     );
   }
 }
@@ -4411,13 +4568,13 @@ class _HealthBadge extends StatelessWidget {
     switch (health) {
       case ProfileHealth.healthy:
         color = const Color(0xFF2C7A5D);
-        label = 'Healthy';
+        label = tr('Healthy', 'Исправен');
       case ProfileHealth.testing:
         color = const Color(0xFF9A6A22);
-        label = 'Testing';
+        label = tr('Testing', 'Проверка');
       case ProfileHealth.offline:
         color = const Color(0xFF8B3A3A);
-        label = 'Offline';
+        label = tr('Offline', 'Офлайн');
     }
 
     return Container(
@@ -4524,7 +4681,7 @@ class _ProfileImportDialogState extends State<_ProfileImportDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Import profile'),
+      title: Text(tr('Import profile', 'Импорт профиля')),
       content: SizedBox(
         width: 720,
         child: SingleChildScrollView(
@@ -4533,11 +4690,13 @@ class _ProfileImportDialogState extends State<_ProfileImportDialog> {
             children: [
               SegmentedButton<_ProfileImportMode>(
                 showSelectedIcon: false,
-                segments: const [
+                segments: [
                   ButtonSegment(
-                      value: _ProfileImportMode.link, label: Text('Link')),
+                      value: _ProfileImportMode.link,
+                      label: Text(tr('Link', 'Ссылка'))),
                   ButtonSegment(
-                      value: _ProfileImportMode.manual, label: Text('Manual')),
+                      value: _ProfileImportMode.manual,
+                      label: Text(tr('Manual', 'Вручную'))),
                 ],
                 selected: {mode},
                 onSelectionChanged: (selection) {
@@ -4564,7 +4723,7 @@ class _ProfileImportDialogState extends State<_ProfileImportDialog> {
                 Column(
                   children: [
                     _ImportSectionCard(
-                      title: 'Endpoint',
+                      title: tr('Endpoint', 'Точка подключения'),
                       child: Wrap(
                         spacing: 12,
                         runSpacing: 12,
@@ -4594,14 +4753,16 @@ class _ProfileImportDialogState extends State<_ProfileImportDialog> {
                             width: 240,
                             child: TextField(
                               controller: nameController,
-                              decoration: _dialogDecoration('Profile name'),
+                              decoration: _dialogDecoration(
+                                  tr('Profile name', 'Имя профиля')),
                             ),
                           ),
                           SizedBox(
                             width: 220,
                             child: TextField(
                               controller: addressController,
-                              decoration: _dialogDecoration('Address / host'),
+                              decoration: _dialogDecoration(
+                                  tr('Address / host', 'Адрес / хост')),
                             ),
                           ),
                           SizedBox(
@@ -4617,7 +4778,7 @@ class _ProfileImportDialogState extends State<_ProfileImportDialog> {
                     ),
                     const SizedBox(height: 12),
                     _ImportSectionCard(
-                      title: 'Transport and TLS',
+                      title: tr('Transport and TLS', 'Транспорт и TLS'),
                       child: Wrap(
                         spacing: 12,
                         runSpacing: 12,
@@ -4741,7 +4902,7 @@ class _ProfileImportDialogState extends State<_ProfileImportDialog> {
                     ),
                     const SizedBox(height: 12),
                     _ImportSectionCard(
-                      title: 'Credentials',
+                      title: tr('Credentials', 'Учетные данные'),
                       child: Wrap(
                         spacing: 12,
                         runSpacing: 12,
@@ -4757,7 +4918,8 @@ class _ProfileImportDialogState extends State<_ProfileImportDialog> {
                             width: 240,
                             child: TextField(
                               controller: passwordController,
-                              decoration: _dialogDecoration('Password'),
+                              decoration:
+                                  _dialogDecoration(tr('Password', 'Пароль')),
                             ),
                           ),
                         ],
@@ -4777,11 +4939,11 @@ class _ProfileImportDialogState extends State<_ProfileImportDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(tr('Cancel', 'Отмена')),
         ),
         FilledButton(
           onPressed: _submit,
-          child: const Text('Save'),
+          child: Text(tr('Save', 'Сохранить')),
         ),
       ],
     );

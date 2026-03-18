@@ -18,6 +18,26 @@ enum RuleBucket { vpn, direct, blocked }
 
 enum RulesProfile { global, russia }
 
+enum AppLanguage { en, ru }
+
+AppLanguage _activeLanguage = AppLanguage.ru;
+
+extension AppLanguageX on AppLanguage {
+  String get flag => this == AppLanguage.ru ? '🇷🇺' : '🇬🇧';
+
+  String get label => this == AppLanguage.ru ? 'Русский' : 'English';
+
+  String get shortLabel => this == AppLanguage.ru ? 'RU' : 'EN';
+}
+
+String loc(AppLanguage language, String en, String ru) {
+  return language == AppLanguage.ru ? ru : en;
+}
+
+String tr(String en, String ru) {
+  return loc(_activeLanguage, en, ru);
+}
+
 class AppPalette {
   static const bg0 = Color(0xFFF0F1F4);
   static const bg1 = Color(0xFFE6E7EB);

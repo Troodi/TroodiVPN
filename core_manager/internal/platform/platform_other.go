@@ -79,7 +79,6 @@ func RequestElevation(executablePath, workingDirectory string) error {
 }
 
 func SetElevationSecret(secret string) error {
-	secret = strings.TrimSpace(secret)
 	if secret == "" {
 		return errors.New("sudo password is required")
 	}
@@ -322,7 +321,7 @@ func PrepareTUN(opts TUNOptions) (*TUNState, error) {
 		BypassCIDRs:    append([]string(nil), opts.BypassCIDRs...),
 	}
 
-	if err := waitForInterface(opts.InterfaceAlias, 3*time.Second); err != nil {
+	if err := waitForInterface(opts.InterfaceAlias, 12*time.Second); err != nil {
 		return nil, err
 	}
 	if err := runRoot("ip", "link", "set", "dev", opts.InterfaceAlias, "up"); err != nil {

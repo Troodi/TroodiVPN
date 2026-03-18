@@ -72,19 +72,37 @@ class AppShadows {
 
 class AppUi {
   static ButtonStyle primaryButton([Color bg = AppPalette.blueDark]) {
-    return FilledButton.styleFrom(
-      backgroundColor: bg,
-      foregroundColor: Colors.white,
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+    return ButtonStyle(
+      backgroundColor: WidgetStatePropertyAll(bg),
+      foregroundColor: const WidgetStatePropertyAll(Colors.white),
+      elevation: const WidgetStatePropertyAll(0),
+      mouseCursor: const WidgetStatePropertyAll(SystemMouseCursors.click),
+      shape: WidgetStatePropertyAll(
+        RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
     );
   }
 
   static ButtonStyle outlinedButton() {
-    return OutlinedButton.styleFrom(
-      foregroundColor: AppPalette.text,
-      side: BorderSide(color: Colors.black.withValues(alpha: 0.08)),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+    return ButtonStyle(
+      foregroundColor: const WidgetStatePropertyAll(AppPalette.text),
+      mouseCursor: const WidgetStatePropertyAll(SystemMouseCursors.click),
+      side: WidgetStatePropertyAll(
+        BorderSide(color: Colors.black.withValues(alpha: 0.08)),
+      ),
+      shape: WidgetStatePropertyAll(
+        RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
+    );
+  }
+
+  static ButtonStyle textButton() {
+    return ButtonStyle(
+      foregroundColor: const WidgetStatePropertyAll(AppPalette.text),
+      mouseCursor: const WidgetStatePropertyAll(SystemMouseCursors.click),
+      shape: WidgetStatePropertyAll(
+        RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
     );
   }
 

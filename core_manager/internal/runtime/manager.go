@@ -267,6 +267,9 @@ func (m *Manager) startLocked(cfg config.AppConfig) error {
 		return err
 	}
 
+	go m.captureLogs(stdout)
+	go m.captureLogs(stderr)
+
 	m.cmd = cmd
 	m.running = true
 	m.configPath = configPath
@@ -305,9 +308,6 @@ func (m *Manager) startLocked(cfg config.AppConfig) error {
 		}
 	}
 	m.startMetricsLoopLocked(cfg)
-
-	go m.captureLogs(stdout)
-	go m.captureLogs(stderr)
 	go m.waitForExit(cmd)
 
 	time.Sleep(300 * time.Millisecond)

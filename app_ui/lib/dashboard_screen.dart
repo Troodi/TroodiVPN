@@ -638,39 +638,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         context: context,
         barrierDismissible: false,
         builder: (context) {
-          return AlertDialog(
-            title: const Text('Administrator access required'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'VPN (TUN) on Linux needs sudo to start Xray and configure routes. The password is kept only in memory until the app is restarted.',
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: controller,
-                  obscureText: true,
-                  autofocus: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Password',
-                    border: OutlineInputBorder(),
-                  ),
-                  onSubmitted: (_) => Navigator.of(context).pop(controller.text),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.of(context).pop(controller.text),
-                child: const Text('Continue'),
-              ),
-            ],
-          );
+          return _LinuxSudoDialog(controller: controller);
         },
       );
     } finally {
@@ -1228,21 +1196,44 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _confirmResetRules() async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Reset rules'),
-        content: const Text(
-          'This will clear Via VPN, Open normally, and Blocked lists.',
+      builder: (context) => _DialogShell(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Reset rules',
+              style: TextStyle(
+                color: AppPalette.homeText.withValues(alpha: 0.96),
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'This will clear Via VPN, Open normally, and Blocked lists.',
+              style: TextStyle(
+                color: AppPalette.homeTextMuted.withValues(alpha: 0.84),
+                height: 1.45,
+              ),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                _DialogSecondaryButton(
+                  label: 'Cancel',
+                  onPressed: () => Navigator.of(context).pop(false),
+                ),
+                const SizedBox(width: 10),
+                _DialogPrimaryButton(
+                  label: 'Reset',
+                  onPressed: () => Navigator.of(context).pop(true),
+                ),
+              ],
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Reset'),
-          ),
-        ],
       ),
     );
 

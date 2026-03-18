@@ -1734,56 +1734,49 @@ class _RuleTesterCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.06),
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: result.isEmpty
-                ? Text(
-                    'Result will appear here.',
+          if (!result.isEmpty) ...[
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Result:',
                     style: TextStyle(
-                      color: AppPalette.homeTextMuted.withValues(alpha: 0.72),
+                      color: AppPalette.homeText.withValues(alpha: 0.94),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '${result.input} -> ${result.destination}',
+                    style: TextStyle(
+                      color: result.accent,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    result.hasMatch
+                        ? 'Matched rule: ${result.matchedRule}'
+                        : 'No matching rules',
+                    style: TextStyle(
+                      color: AppPalette.homeTextMuted.withValues(alpha: 0.82),
                       fontSize: 13,
                     ),
-                  )
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Result:',
-                        style: TextStyle(
-                          color: AppPalette.homeText.withValues(alpha: 0.94),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        '${result.input} -> ${result.destination}',
-                        style: TextStyle(
-                          color: result.accent,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        result.hasMatch
-                            ? 'Matched rule: ${result.matchedRule}'
-                            : 'No matching rules',
-                        style: TextStyle(
-                          color:
-                              AppPalette.homeTextMuted.withValues(alpha: 0.82),
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
                   ),
-          ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -1917,6 +1910,122 @@ class _RulesGlassCard extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(18),
         child: child,
+      ),
+    );
+  }
+}
+
+class _DialogShell extends StatelessWidget {
+  const _DialogShell({
+    required this.child,
+    this.maxWidth = 560,
+  });
+
+  final Widget child;
+  final double maxWidth;
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.all(24),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: maxWidth),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: const Color(0xFF151A30),
+            borderRadius: BorderRadius.circular(30),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+            boxShadow: [AppShadows.darkCard],
+          ),
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
+class _DialogSecondaryButton extends StatelessWidget {
+  const _DialogSecondaryButton({
+    required this.label,
+    required this.onPressed,
+  });
+
+  final String label;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 48,
+      child: TextButton(
+        onPressed: onPressed,
+        style: TextButton.styleFrom(
+          foregroundColor: AppPalette.homeText.withValues(alpha: 0.92),
+          backgroundColor: Colors.white.withValues(alpha: 0.06),
+          padding: const EdgeInsets.symmetric(horizontal: 18),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+          ),
+        ),
+        child: Text(
+          label,
+          style: const TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DialogPrimaryButton extends StatelessWidget {
+  const _DialogPrimaryButton({
+    required this.label,
+    required this.onPressed,
+  });
+
+  final String label;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 48,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        gradient: const LinearGradient(
+          colors: [
+            AppPalette.homeAccent,
+            AppPalette.homeAccentStrong,
+          ],
+        ),
+        boxShadow: [
+          AppShadows.glow(AppPalette.homeAccentStrong),
+        ],
+      ),
+      child: FilledButton(
+        onPressed: onPressed,
+        style: FilledButton.styleFrom(
+          backgroundColor: Colors.transparent,
+          shadowColor: Colors.transparent,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(color: Colors.white.withValues(alpha: 0.14)),
+          ),
+        ),
+        child: Text(
+          label,
+          style: const TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
       ),
     );
   }
@@ -2620,79 +2729,69 @@ class _DomainTestCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  result.isEmpty
-                      ? Colors.white.withValues(alpha: 0.06)
-                      : result.accent.withValues(alpha: 0.16),
-                  Colors.white.withValues(alpha: 0.03),
-                ],
+          if (!result.isEmpty) ...[
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    result.accent.withValues(alpha: 0.16),
+                    Colors.white.withValues(alpha: 0.03),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                  color: result.accent.withValues(alpha: 0.26),
+                ),
               ),
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(
-                color: result.isEmpty
-                    ? Colors.white.withValues(alpha: 0.08)
-                    : result.accent.withValues(alpha: 0.26),
-              ),
-            ),
-            child: result.isEmpty
-                ? Text(
-                    'Result will appear here after testing.',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    result.destination,
                     style: TextStyle(
-                      color: AppPalette.homeTextMuted.withValues(alpha: 0.72),
-                      fontSize: 13,
+                      color: result.accent,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
                     ),
-                  )
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
                     children: [
-                      Text(
-                        result.destination,
-                        style: TextStyle(
-                          color: result.accent,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
+                      _InlineInfoChip(
+                        label: result.input,
+                        accent: result.accent,
+                      ),
+                      if (result.typeLabel.isNotEmpty)
+                        _InlineInfoChip(
+                          label: result.typeLabel,
+                          accent: result.accent,
                         ),
-                      ),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          _InlineInfoChip(
-                            label: result.input,
-                            accent: result.accent,
-                          ),
-                          if (result.typeLabel.isNotEmpty)
-                            _InlineInfoChip(
-                              label: result.typeLabel,
-                              accent: result.accent,
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      _ResultRow(
-                        label: 'Matched rule',
-                        value: result.hasMatch
-                            ? result.matchedRule
-                            : 'No matching rules',
-                      ),
-                      if (!result.hasMatch &&
-                          result.defaultBehavior.isNotEmpty) ...[
-                        const SizedBox(height: 6),
-                        _ResultRow(
-                          label: 'Default behavior',
-                          value: result.defaultBehavior,
-                        ),
-                      ],
                     ],
                   ),
-          ),
+                  const SizedBox(height: 10),
+                  _ResultRow(
+                    label: 'Matched rule',
+                    value: result.hasMatch
+                        ? result.matchedRule
+                        : 'No matching rules',
+                  ),
+                  if (!result.hasMatch &&
+                      result.defaultBehavior.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    _ResultRow(
+                      label: 'Default behavior',
+                      value: result.defaultBehavior,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -2795,10 +2894,33 @@ class _RulesColumnCard extends StatelessWidget {
               onAdd: onAdd,
             ),
             const SizedBox(height: 10),
-            OutlinedButton.icon(
-              onPressed: onPaste,
-              icon: const Icon(Icons.content_paste_rounded, size: 16),
-              label: const Text('Paste list'),
+            SizedBox(
+              width: double.infinity,
+              child: TextButton.icon(
+                onPressed: onPaste,
+                style: TextButton.styleFrom(
+                  foregroundColor: AppPalette.homeText.withValues(alpha: 0.92),
+                  backgroundColor: Colors.white.withValues(alpha: 0.06),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    side: BorderSide(
+                      color: Colors.white.withValues(alpha: 0.08),
+                    ),
+                  ),
+                ),
+                icon: const Icon(Icons.content_paste_rounded, size: 16),
+                label: const Text(
+                  'Paste list',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
             ),
             const SizedBox(height: 10),
             TextField(
@@ -3084,70 +3206,140 @@ class _EditRuleDialogState extends State<_EditRuleDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.all(24),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 560),
-        child: _RulesGlassCard(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+    return _DialogShell(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Edit rule in ${widget.title}',
+            style: TextStyle(
+              color: AppPalette.homeText.withValues(alpha: 0.96),
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Update the value and save the rule.',
+            style: TextStyle(
+              color: AppPalette.homeTextMuted.withValues(alpha: 0.82),
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: widget.controller,
+            autofocus: true,
+            onSubmitted: (_) => _submit(),
+            style: TextStyle(
+              color: AppPalette.homeText.withValues(alpha: 0.94),
+            ),
+            decoration: InputDecoration(
+              hintText: widget.initialValue,
+              hintStyle: TextStyle(
+                color: AppPalette.homeTextMuted.withValues(alpha: 0.90),
+              ),
+              filled: true,
+              fillColor: Colors.white.withValues(alpha: 0.08),
+            ),
+          ),
+          if (errorText != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              errorText!,
+              style: const TextStyle(
+                color: Color(0xFFFF9E8B),
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+          const SizedBox(height: 20),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              Text(
-                'Edit rule in ${widget.title}',
-                style: TextStyle(
-                  color: AppPalette.homeText.withValues(alpha: 0.96),
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                ),
+              _DialogSecondaryButton(
+                label: 'Cancel',
+                onPressed: () => Navigator.of(context).pop(),
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: widget.controller,
-                autofocus: true,
-                onSubmitted: (_) => _submit(),
-                style: TextStyle(
-                  color: AppPalette.homeText.withValues(alpha: 0.94),
-                ),
-                decoration: InputDecoration(
-                  hintText: widget.initialValue,
-                  hintStyle: TextStyle(
-                    color: AppPalette.homeTextMuted.withValues(alpha: 0.90),
-                  ),
-                  filled: true,
-                  fillColor: Colors.white.withValues(alpha: 0.08),
-                ),
-              ),
-              if (errorText != null) ...[
-                const SizedBox(height: 8),
-                Text(
-                  errorText!,
-                  style: const TextStyle(
-                    color: Color(0xFFFF9E8B),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('Cancel'),
-                  ),
-                  const SizedBox(width: 10),
-                  FilledButton(
-                    onPressed: _submit,
-                    child: const Text('Save'),
-                  ),
-                ],
+              const SizedBox(width: 10),
+              _DialogPrimaryButton(
+                label: 'Save',
+                onPressed: _submit,
               ),
             ],
           ),
-        ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LinuxSudoDialog extends StatelessWidget {
+  const _LinuxSudoDialog({
+    required this.controller,
+  });
+
+  final TextEditingController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return _DialogShell(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Administrator access required',
+            style: TextStyle(
+              color: AppPalette.homeText.withValues(alpha: 0.96),
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'VPN (TUN) on Linux needs sudo to start Xray and configure routes. The password is kept only in memory until the app is restarted.',
+            style: TextStyle(
+              color: AppPalette.homeTextMuted.withValues(alpha: 0.84),
+              height: 1.45,
+            ),
+          ),
+          const SizedBox(height: 18),
+          TextField(
+            controller: controller,
+            obscureText: true,
+            autofocus: true,
+            style: TextStyle(
+              color: AppPalette.homeText.withValues(alpha: 0.94),
+            ),
+            decoration: InputDecoration(
+              labelText: 'Password',
+              labelStyle: TextStyle(
+                color: AppPalette.homeTextMuted.withValues(alpha: 0.82),
+              ),
+              filled: true,
+              fillColor: Colors.white.withValues(alpha: 0.08),
+            ),
+            onSubmitted: (_) => Navigator.of(context).pop(controller.text),
+          ),
+          const SizedBox(height: 20),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              _DialogSecondaryButton(
+                label: 'Cancel',
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+              const SizedBox(width: 10),
+              _DialogPrimaryButton(
+                label: 'Continue',
+                onPressed: () => Navigator.of(context).pop(controller.text),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -3220,115 +3412,108 @@ class _PasteListDialogState extends State<_PasteListDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.all(24),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 760),
-        child: _RulesGlassCard(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+    return _DialogShell(
+      maxWidth: 760,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Paste list to ${widget.title}',
+            style: TextStyle(
+              color: AppPalette.homeText.withValues(alpha: 0.96),
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'One rule per line. Empty lines are ignored.',
+            style: TextStyle(
+              color: AppPalette.homeTextMuted.withValues(alpha: 0.82),
+            ),
+          ),
+          const SizedBox(height: 12),
+          const Wrap(
+            spacing: 8,
+            runSpacing: 8,
             children: [
-              Text(
-                'Paste list to ${widget.title}',
-                style: TextStyle(
-                  color: AppPalette.homeText.withValues(alpha: 0.96),
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
+              _FormatChip(label: 'example.com'),
+              _FormatChip(label: '*.example.com'),
+              _FormatChip(label: '1.1.1.1'),
+              _FormatChip(label: '192.168.0.0/24'),
+            ],
+          ),
+          const SizedBox(height: 14),
+          TextField(
+            controller: controller,
+            minLines: 8,
+            maxLines: 12,
+            style: TextStyle(
+              color: AppPalette.homeText.withValues(alpha: 0.94),
+            ),
+            decoration: InputDecoration(
+              hintText: 'github.com\n*.openai.com\n1.1.1.1\n192.168.0.0/24',
+              hintStyle: TextStyle(
+                color: AppPalette.homeTextMuted.withValues(alpha: 0.9),
+              ),
+              filled: true,
+              fillColor: Colors.white.withValues(alpha: 0.08),
+            ),
+          ),
+          if (invalidLines.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFF9E8B).withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                  color: const Color(0xFFFF9E8B).withValues(alpha: 0.22),
                 ),
               ),
-              const SizedBox(height: 12),
-              Text(
-                'One rule per line. Empty lines are ignored.',
-                style: TextStyle(
-                  color: AppPalette.homeTextMuted.withValues(alpha: 0.82),
-                ),
-              ),
-              const SizedBox(height: 12),
-              const Wrap(
-                spacing: 8,
-                runSpacing: 8,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _FormatChip(label: 'example.com'),
-                  _FormatChip(label: '*.example.com'),
-                  _FormatChip(label: '1.1.1.1'),
-                  _FormatChip(label: '192.168.0.0/24'),
-                ],
-              ),
-              const SizedBox(height: 14),
-              TextField(
-                controller: controller,
-                minLines: 8,
-                maxLines: 12,
-                style: TextStyle(
-                  color: AppPalette.homeText.withValues(alpha: 0.94),
-                ),
-                decoration: InputDecoration(
-                  hintText: 'github.com\n*.openai.com\n1.1.1.1\n192.168.0.0/24',
-                  hintStyle: TextStyle(
-                    color: AppPalette.homeTextMuted.withValues(alpha: 0.9),
-                  ),
-                  filled: true,
-                  fillColor: Colors.white.withValues(alpha: 0.08),
-                ),
-              ),
-              if (invalidLines.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFF9E8B).withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(
-                      color: const Color(0xFFFF9E8B).withValues(alpha: 0.22),
+                  const Text(
+                    'These lines could not be added',
+                    style: TextStyle(
+                      color: Color(0xFFFFB6A7),
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'These lines could not be added',
+                  const SizedBox(height: 8),
+                  for (final line in invalidLines.take(6))
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text(
+                        line,
                         style: TextStyle(
-                          color: Color(0xFFFFB6A7),
-                          fontWeight: FontWeight.w700,
+                          color: AppPalette.homeText.withValues(alpha: 0.92),
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      for (final line in invalidLines.take(6))
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 4),
-                          child: Text(
-                            line,
-                            style: TextStyle(
-                              color:
-                                  AppPalette.homeText.withValues(alpha: 0.92),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ],
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('Cancel'),
-                  ),
-                  const SizedBox(width: 10),
-                  FilledButton(
-                    onPressed: _submit,
-                    child: const Text('Apply'),
-                  ),
+                    ),
                 ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 20),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              _DialogSecondaryButton(
+                label: 'Cancel',
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+              const SizedBox(width: 10),
+              _DialogPrimaryButton(
+                label: 'Apply',
+                onPressed: _submit,
               ),
             ],
           ),
-        ),
+        ],
       ),
     );
   }
@@ -3355,77 +3540,71 @@ class _PasteListSummaryDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.all(24),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 620),
-        child: _RulesGlassCard(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Paste results',
-                style: TextStyle(
-                  color: AppPalette.homeText.withValues(alpha: 0.96),
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                addedCount == 1 ? '1 rule added.' : '$addedCount rules added.',
-                style: TextStyle(
-                  color: AppPalette.homeText.withValues(alpha: 0.92),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Lines that need review',
-                style: TextStyle(
-                  color: AppPalette.homeTextMuted.withValues(alpha: 0.84),
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFF9E8B).withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(
-                    color: const Color(0xFFFF9E8B).withValues(alpha: 0.20),
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    for (final line in invalidLines.take(8))
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 4),
-                        child: Text(
-                          line,
-                          style: TextStyle(
-                            color: AppPalette.homeText.withValues(alpha: 0.92),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              Align(
-                alignment: Alignment.centerRight,
-                child: FilledButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Close'),
-                ),
-              ),
-            ],
+    return _DialogShell(
+      maxWidth: 620,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Paste results',
+            style: TextStyle(
+              color: AppPalette.homeText.withValues(alpha: 0.96),
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+            ),
           ),
-        ),
+          const SizedBox(height: 10),
+          Text(
+            addedCount == 1 ? '1 rule added.' : '$addedCount rules added.',
+            style: TextStyle(
+              color: AppPalette.homeText.withValues(alpha: 0.92),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Lines that need review',
+            style: TextStyle(
+              color: AppPalette.homeTextMuted.withValues(alpha: 0.84),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFF9E8B).withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: const Color(0xFFFF9E8B).withValues(alpha: 0.20),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (final line in invalidLines.take(8))
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text(
+                      line,
+                      style: TextStyle(
+                        color: AppPalette.homeText.withValues(alpha: 0.92),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          Align(
+            alignment: Alignment.centerRight,
+            child: _DialogPrimaryButton(
+              label: 'Close',
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -3619,7 +3798,7 @@ List<Widget> _behaviorStats({
 }
 
 List<Widget> _previewRuleChips(List<RoutingRule> rules, Color accent) {
-  final visible = rules.take(3).toList(growable: false);
+  final visible = rules.take(5).toList(growable: false);
   final widgets = <Widget>[
     for (final rule in visible)
       _InlineInfoChip(

@@ -43,6 +43,9 @@ class TroodiVpnApp extends StatelessWidget {
         filledButtonTheme: FilledButtonThemeData(
           style: AppUi.primaryButton(),
         ),
+        textButtonTheme: TextButtonThemeData(
+          style: AppUi.textButton(),
+        ),
         outlinedButtonTheme: OutlinedButtonThemeData(
           style: AppUi.outlinedButton(),
         ),

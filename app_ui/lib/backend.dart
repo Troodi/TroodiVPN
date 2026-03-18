@@ -41,6 +41,15 @@ class BackendClient {
     return _decodeSnapshot(response);
   }
 
+  Future<void> shutdown() async {
+    final response = await http
+        .post(Uri.parse('$baseUrl/api/v1/shutdown'))
+        .timeout(const Duration(seconds: 8));
+    if (response.statusCode >= 400) {
+      throw Exception(response.body);
+    }
+  }
+
   Future<bool> getAdminStatus() async {
     final response = await http.get(Uri.parse('$baseUrl/api/v1/admin-status'));
     final body = jsonDecode(response.body) as Map<String, dynamic>;
@@ -125,9 +134,23 @@ class BackendRuntime {
 
   Future<void> dispose() async {
     if (_launchedByApp && _process != null) {
-      _process!.kill();
-      _process = null;
-      _launchedByApp = false;
+      try {
+        if (await _isReachable()) {
+          await backend.shutdown();
+        }
+      } catch (_) {
+        // Fallback to process kill below if graceful shutdown is unavailable.
+      }
+
+      try {
+        final exitCode = _process!.exitCode;
+        await exitCode.timeout(const Duration(seconds: 3));
+      } catch (_) {
+        _process!.kill();
+      } finally {
+        _process = null;
+        _launchedByApp = false;
+      }
     }
   }
 

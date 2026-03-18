@@ -27,6 +27,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("PUT /api/v1/state", s.handlePutState)
 	mux.HandleFunc("POST /api/v1/connect", s.handleConnect)
 	mux.HandleFunc("POST /api/v1/disconnect", s.handleDisconnect)
+	mux.HandleFunc("POST /api/v1/shutdown", s.handleShutdown)
 	mux.HandleFunc("GET /api/v1/xray-config", s.handleGetXrayConfig)
 	mux.HandleFunc("GET /api/v1/logs", s.handleGetLogs)
 	mux.HandleFunc("GET /api/v1/admin-status", s.handleGetAdminStatus)
@@ -85,6 +86,20 @@ func (s *Server) handleDisconnect(w http.ResponseWriter, _ *http.Request) {
 	cfg.ConnectionState = config.ConnectionDisconnected
 	s.store.Put(cfg)
 	writeJSON(w, http.StatusOK, s.snapshot())
+}
+
+func (s *Server) handleShutdown(w http.ResponseWriter, _ *http.Request) {
+	cfg := s.store.Get()
+	if err := s.runtime.Stop(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	cfg.ConnectionState = config.ConnectionDisconnected
+	s.store.Put(cfg)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok": true,
+	})
 }
 
 func (s *Server) handleGetXrayConfig(w http.ResponseWriter, _ *http.Request) {

@@ -1,8 +1,12 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/troodi/xray-desktop/core-manager/internal/api"
@@ -35,6 +39,22 @@ func main() {
 		Handler:           handler.Routes(),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
+
+	signalCtx, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stopSignals()
+
+	go func() {
+		<-signalCtx.Done()
+		log.Printf("shutdown signal received, stopping runtime")
+		if err := runtime.Stop(); err != nil {
+			log.Printf("runtime stop on shutdown failed: %v", err)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		if err := server.Shutdown(ctx); err != nil {
+			log.Printf("http shutdown failed: %v", err)
+		}
+	}()
 
 	log.Printf("core-manager listening on http://%s", server.Addr)
 

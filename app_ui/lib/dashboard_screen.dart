@@ -25,6 +25,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool isLoading = true;
   bool isBusy = false;
   bool isConnecting = false;
+  bool isElevationInProgress = false;
   String? errorMessage;
   RuntimeSnapshot runtimeStatus = RuntimeSnapshot.empty;
 
@@ -64,6 +65,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     blockedSearchController = TextEditingController();
     _bootstrap();
     pollTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (isElevationInProgress) {
+        return;
+      }
       _refreshState(silent: true);
     });
   }
@@ -375,7 +379,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _refreshState({bool silent = false}) async {
-    if (isRefreshing || isBusy) {
+    if (isRefreshing || isBusy || isElevationInProgress) {
       return;
     }
 
@@ -420,6 +424,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<bool> _ensureBackendReady({bool silent = false}) async {
+    if (isElevationInProgress) {
+      return false;
+    }
     try {
       await backendRuntime.ensureRunning();
       return true;
@@ -613,6 +620,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
 
     try {
+      if (mounted) {
+        setState(() {
+          isElevationInProgress = true;
+        });
+      }
       await backend.requestAdmin();
     } catch (error) {
       final message = error.toString().toLowerCase();
@@ -621,6 +633,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           message.contains('connection reset');
       if (!reconnectExpected) {
         if (mounted) {
+          setState(() {
+            isElevationInProgress = false;
+          });
           _showMessage(error.toString(), isError: true);
         }
         return false;
@@ -640,6 +655,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         if (snapshot.runtime.elevated) {
           if (mounted) {
             setState(() {
+              isElevationInProgress = false;
               _applySnapshot(snapshot);
               errorMessage = null;
             });
@@ -652,6 +668,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
 
     if (mounted) {
+      setState(() {
+        isElevationInProgress = false;
+      });
       _showMessage(
           tr('Failed to reconnect to an elevated backend.',
               'Не удалось переподключиться к backend с повышенными правами.'),

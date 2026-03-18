@@ -6,13 +6,16 @@ type Config map[string]any
 
 type BuildOptions struct {
 	BindInterface string
+	BindAddress   string
 	TUNInterface  string
+	TUNAddress    string
 	TUNMTU        int
 }
 
 func DefaultBuildOptions() BuildOptions {
 	return BuildOptions{
 		TUNInterface: "xray0",
+		TUNAddress:   "198.18.0.1",
 		TUNMTU:       1500,
 	}
 }
@@ -24,6 +27,16 @@ func Build(cfg config.AppConfig) Config {
 func BuildWithOptions(cfg config.AppConfig, opts BuildOptions) Config {
 	rules := make([]map[string]any, 0, len(cfg.ProxyDomains)+len(cfg.DirectDomains)+len(cfg.BlockedDomains)+8)
 	activeProfile := findActiveProfile(cfg)
+
+	if cfg.TUNEnabled {
+		rules = append(rules, map[string]any{
+			"type":        "field",
+			"inboundTag":  []string{"tun-in"},
+			"port":        53,
+			"network":     "tcp,udp",
+			"outboundTag": "dns-out",
+		})
+	}
 
 	if len(cfg.BlockedDomains) > 0 {
 		rules = appendDomainRule(rules, cfg.BlockedDomains, "block")
@@ -65,8 +78,9 @@ func BuildWithOptions(cfg config.AppConfig, opts BuildOptions) Config {
 		"dns":      buildDNS(cfg),
 		"inbounds": buildInbounds(cfg, opts),
 		"outbounds": []map[string]any{
-			buildProxyOutbound(activeProfile, opts.BindInterface),
-			buildFreedomOutbound("direct", opts.BindInterface),
+			buildProxyOutbound(activeProfile, opts.BindInterface, opts.BindAddress),
+			buildFreedomOutbound("direct", opts.BindInterface, opts.BindAddress, cfg.RulesProfile == config.RulesProfileRussia),
+			{"tag": "dns-out", "protocol": "dns"},
 			{"tag": "block", "protocol": "blackhole"},
 		},
 		"routing": map[string]any{
@@ -81,23 +95,25 @@ func buildDNS(cfg config.AppConfig) map[string]any {
 		servers := make([]any, 0, 8)
 
 		if len(cfg.ProxyDomains) > 0 {
-			servers = append(servers, dnsServer("1.1.1.1", cfg.ProxyDomains, nil))
+			servers = append(servers, dnsServer("1.1.1.1", cfg.ProxyDomains, nil, true))
 		}
 		if len(cfg.DirectDomains) > 0 {
-			servers = append(servers, dnsServer("localhost", cfg.DirectDomains, []string{"geoip:private", "geoip:ru"}))
+			servers = append(servers, dnsServer("tcp+local://77.88.8.8", cfg.DirectDomains, []string{"geoip:private", "geoip:ru"}, true))
 		}
 
 		servers = append(servers,
-			dnsServer("1.1.1.1", []string{"geosite:ru-blocked"}, nil),
-			dnsServer("localhost", []string{"geosite:private"}, []string{"geoip:private"}),
-			dnsServer("localhost", []string{"geosite:ru-available-only-inside"}, []string{"geoip:ru"}),
-			dnsServer("localhost", []string{"regexp:(^|\\.).*\\.ru$", "regexp:(^|\\.).*\\.xn--p1ai$"}, []string{"geoip:ru"}),
+			dnsServer("1.1.1.1", []string{"geosite:ru-blocked"}, nil, true),
+			dnsServer("localhost", []string{"geosite:private"}, []string{"geoip:private"}, true),
+			dnsServer("tcp+local://77.88.8.8", []string{"geosite:ru-available-only-inside"}, []string{"geoip:ru"}, true),
+			dnsServer("tcp+local://77.88.8.8", []string{"regexp:(^|\\.).*\\.ru$", "regexp:(^|\\.).*\\.xn--p1ai$"}, []string{"geoip:ru"}, true),
+			"localhost",
 			"1.1.1.1",
 			"8.8.8.8",
 		)
 
 		return map[string]any{
-			"servers": servers,
+			"servers":       servers,
+			"queryStrategy": "UseIPv4",
 		}
 	}
 
@@ -106,13 +122,20 @@ func buildDNS(cfg config.AppConfig) map[string]any {
 		dnsServers = []string{"localhost"}
 	}
 
-	return map[string]any{"servers": dnsServers}
+	dnsConfig := map[string]any{"servers": dnsServers}
+	if cfg.TUNEnabled {
+		dnsConfig["queryStrategy"] = "UseIPv4"
+	}
+	return dnsConfig
 }
 
-func dnsServer(address string, domains []string, expectIPs []string) map[string]any {
+func dnsServer(address string, domains []string, expectIPs []string, disableFallback bool) map[string]any {
 	server := map[string]any{
 		"address":      address,
 		"skipFallback": true,
+	}
+	if disableFallback {
+		server["disableFallbackIfMatch"] = true
 	}
 	if len(domains) > 0 {
 		server["domains"] = domains
@@ -196,10 +219,20 @@ func findActiveProfile(cfg config.AppConfig) config.ServerProfile {
 	return config.ServerProfile{}
 }
 
-func buildFreedomOutbound(tag, bindInterface string) map[string]any {
+func buildFreedomOutbound(tag, bindInterface, bindAddress string, useIPv4Resolver bool) map[string]any {
 	outbound := map[string]any{
 		"tag":      tag,
 		"protocol": "freedom",
+	}
+
+	if bindAddress != "" {
+		outbound["sendThrough"] = bindAddress
+	}
+
+	if useIPv4Resolver {
+		outbound["settings"] = map[string]any{
+			"domainStrategy": "UseIPv4",
+		}
 	}
 
 	if bindInterface != "" {
@@ -213,14 +246,17 @@ func buildFreedomOutbound(tag, bindInterface string) map[string]any {
 	return outbound
 }
 
-func buildProxyOutbound(profile config.ServerProfile, bindInterface string) map[string]any {
+func buildProxyOutbound(profile config.ServerProfile, bindInterface, bindAddress string) map[string]any {
 	if profile.Protocol == "" || profile.Address == "" || profile.Port <= 0 {
-		return buildFreedomOutbound("proxy", bindInterface)
+		return buildFreedomOutbound("proxy", bindInterface, bindAddress, false)
 	}
 
 	outbound := map[string]any{
 		"tag":      "proxy",
 		"protocol": profile.Protocol,
+	}
+	if bindAddress != "" {
+		outbound["sendThrough"] = bindAddress
 	}
 
 	if settings := buildOutboundSettings(profile); settings != nil {

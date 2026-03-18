@@ -27,6 +27,7 @@ type DefaultRoute struct {
 	InterfaceAlias string `json:"InterfaceAlias"`
 	InterfaceIndex int    `json:"ifIndex"`
 	NextHop        string `json:"NextHop"`
+	IPAddress      string `json:"IPAddress"`
 }
 
 type TUNOptions struct {
@@ -79,12 +80,14 @@ func RequestElevation(executablePath, workingDirectory string) error {
 		escapeSingleQuotes(workingDirectory),
 	)
 
-	return exec.Command(
+	cmd := exec.Command(
 		"powershell",
 		"-NoProfile",
 		"-Command",
 		command,
-	).Start()
+	)
+	cmd.SysProcAttr = hiddenPowerShellAttributes()
+	return cmd.Start()
 }
 
 func SetElevationSecret(secret string) error {
@@ -223,6 +226,10 @@ $route = Get-NetRoute -AddressFamily IPv4 -DestinationPrefix '0.0.0.0/0' |
   Sort-Object RouteMetric, InterfaceMetric |
   Select-Object -First 1 InterfaceAlias, ifIndex, NextHop
 if ($null -eq $route) { exit 2 }
+$ip = Get-NetIPAddress -InterfaceIndex $route.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+  Where-Object { $_.IPAddress -notlike '169.254.*' } |
+  Select-Object -First 1 -ExpandProperty IPAddress
+if ($null -ne $ip) { $route | Add-Member -NotePropertyName IPAddress -NotePropertyValue $ip }
 $route | ConvertTo-Json -Compress
 `
 
@@ -249,27 +256,27 @@ func PrepareTUN(opts TUNOptions) (*TUNState, error) {
 
 	index, err := waitForAdapterIndex(opts.InterfaceAlias, 12*time.Second)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("waitForAdapterIndex: %w", err)
 	}
 
 	if err := ensureTUNAddress(opts); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("ensureTUNAddress: %w", err)
 	}
 	if err := setTUNDNS(opts); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("setTUNDNS: %w", err)
 	}
 	if err := setTUNMetric(opts.InterfaceAlias); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("setTUNMetric: %w", err)
 	}
 	routePrefixes := []string{}
 	bypassCIDRs := []string{}
 	if opts.ManageRoutes {
 		if err := ensureBypassRoutes(opts); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("ensureBypassRoutes: %w", err)
 		}
 		bypassCIDRs = append(bypassCIDRs, opts.BypassCIDRs...)
 		if err := ensureSplitDefaultRoutes(opts.InterfaceAlias); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("ensureSplitDefaultRoutes: %w", err)
 		}
 		routePrefixes = []string{"0.0.0.0/1", "128.0.0.0/1"}
 	}
@@ -340,6 +347,7 @@ func escapeSingleQuotes(value string) string {
 
 func runPowerShellJSON(script string) ([]byte, error) {
 	command := exec.Command("powershell", "-NoProfile", "-Command", script)
+	command.SysProcAttr = hiddenPowerShellAttributes()
 	output, err := command.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s", err, strings.TrimSpace(string(output)))
@@ -350,6 +358,7 @@ func runPowerShellJSON(script string) ([]byte, error) {
 
 func runPowerShell(script string) error {
 	command := exec.Command("powershell", "-NoProfile", "-Command", script)
+	command.SysProcAttr = hiddenPowerShellAttributes()
 	output, err := command.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(output)))
@@ -359,16 +368,40 @@ func runPowerShell(script string) error {
 }
 
 func waitForAdapterIndex(alias string, timeout time.Duration) (int, error) {
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		index, err := getAdapterIndex(alias)
-		if err == nil && index > 0 {
-			return index, nil
-		}
-		time.Sleep(500 * time.Millisecond)
+	timeoutSeconds := int(timeout / time.Second)
+	if timeoutSeconds <= 0 {
+		timeoutSeconds = 1
 	}
 
-	return 0, fmt.Errorf("timed out waiting for TUN adapter %q", alias)
+	script := fmt.Sprintf(`
+$deadline = (Get-Date).AddSeconds(%d)
+while ((Get-Date) -lt $deadline) {
+  $adapter = Get-NetAdapter -IncludeHidden -Name '%s' -ErrorAction SilentlyContinue | Select-Object -First 1 ifIndex
+  if ($null -ne $adapter -and $adapter.ifIndex -gt 0) {
+    $adapter | ConvertTo-Json -Compress
+    exit 0
+  }
+  Start-Sleep -Milliseconds 150
+}
+exit 2
+`, timeoutSeconds, escapeSingleQuotes(alias))
+
+	output, err := runPowerShellJSON(script)
+	if err != nil {
+		return 0, fmt.Errorf("timed out waiting for TUN adapter %q", alias)
+	}
+
+	var payload struct {
+		InterfaceIndex int `json:"ifIndex"`
+	}
+	if err := json.Unmarshal(output, &payload); err != nil {
+		return 0, err
+	}
+	if payload.InterfaceIndex <= 0 {
+		return 0, fmt.Errorf("timed out waiting for TUN adapter %q", alias)
+	}
+
+	return payload.InterfaceIndex, nil
 }
 
 func getAdapterIndex(alias string) (int, error) {
@@ -527,4 +560,11 @@ if ($null -ne $existing) {
 `, prefix)
 
 	return runPowerShell(script)
+}
+
+func hiddenPowerShellAttributes() *syscall.SysProcAttr {
+	return &syscall.SysProcAttr{
+		HideWindow:    true,
+		CreationFlags: windows.CREATE_NO_WINDOW,
+	}
 }

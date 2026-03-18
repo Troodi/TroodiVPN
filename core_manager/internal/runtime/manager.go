@@ -83,10 +83,7 @@ func NewManager(binaryPath string) *Manager {
 }
 
 func (m *Manager) WarmRoutingAssets() error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	_, err := m.ensureRoutingAssetsLockedInternal(true, false)
+	_, err := m.ensureRoutingAssets(false)
 	return err
 }
 
@@ -196,6 +193,8 @@ func (m *Manager) Status() Status {
 }
 
 func (m *Manager) startLocked(cfg config.AppConfig) error {
+	startedAt := time.Now()
+
 	if err := m.ensureBinaryLocked(); err != nil {
 		return err
 	}
@@ -203,7 +202,7 @@ func (m *Manager) startLocked(cfg config.AppConfig) error {
 	if err != nil {
 		return err
 	}
-	if err := m.cleanupStaleProcessesLocked(); err != nil {
+	if err := m.cleanupStaleProcessesLocked(m.binaryPath); err != nil {
 		return err
 	}
 	if cfg.TUNEnabled && !platform.IsElevated() {
@@ -212,16 +211,22 @@ func (m *Manager) startLocked(cfg config.AppConfig) error {
 	buildOptions := xray.DefaultBuildOptions()
 	tunOptions := platform.DefaultTUNOptions()
 	if cfg.TUNEnabled {
+		tunOptions.DNSServers = []string{tunOptions.IPAddress}
+
+		m.appendLogLocked(fmt.Sprintf("[%s] TUN: validating wintun.dll", time.Now().Format(time.RFC3339)))
 		if err := platform.EnsureWintunDLL(m.binaryPath); err != nil {
 			return err
 		}
 
+		m.appendLogLocked(fmt.Sprintf("[%s] TUN: capturing default route", time.Now().Format(time.RFC3339)))
 		defaultRoute, err := platform.CaptureDefaultRoute()
 		if err != nil {
 			return err
 		}
+		m.appendLogLocked(fmt.Sprintf("[%s] TUN: default route captured in %d ms", time.Now().Format(time.RFC3339), time.Since(startedAt).Milliseconds()))
 		activeProfile := activeProfile(cfg)
 		buildOptions.BindInterface = defaultRoute.InterfaceAlias
+		buildOptions.BindAddress = defaultRoute.IPAddress
 		tunOptions.ManageRoutes = true
 		tunOptions.DefaultRoute = defaultRoute
 		if tunOptions.ManageRoutes {
@@ -232,6 +237,7 @@ func (m *Manager) startLocked(cfg config.AppConfig) error {
 			tunOptions.BypassCIDRs = bypassCIDRs
 		}
 		buildOptions.TUNInterface = tunOptions.InterfaceAlias
+		buildOptions.TUNAddress = tunOptions.IPAddress
 		buildOptions.TUNMTU = tunOptions.MTU
 	}
 
@@ -292,6 +298,8 @@ func (m *Manager) startLocked(cfg config.AppConfig) error {
 		m.appendLogLocked("system proxy error: " + err.Error())
 	}
 	if cfg.TUNEnabled {
+		m.appendLogLocked(fmt.Sprintf("[%s] TUN: preparing adapter and routes", time.Now().Format(time.RFC3339)))
+		prepareStartedAt := time.Now()
 		tunState, err := platform.PrepareTUN(tunOptions)
 		if err != nil {
 			_ = m.stopLocked()
@@ -306,6 +314,8 @@ func (m *Manager) startLocked(cfg config.AppConfig) error {
 		} else {
 			m.appendLogLocked(fmt.Sprintf("[%s] TUN adapter %s configured in safe test mode (routes unchanged)", time.Now().Format(time.RFC3339), tunState.InterfaceAlias))
 		}
+		m.ready = true
+		m.appendLogLocked(fmt.Sprintf("[%s] TUN: adapter and routes ready in %d ms", time.Now().Format(time.RFC3339), time.Since(prepareStartedAt).Milliseconds()))
 	}
 	m.startMetricsLoopLocked(cfg)
 	go m.waitForExit(cmd)
@@ -317,6 +327,10 @@ func (m *Manager) startLocked(cfg config.AppConfig) error {
 			return errors.New(status.LastExit)
 		}
 		return errors.New("xray exited immediately after start")
+	}
+
+	if cfg.TUNEnabled {
+		m.appendLogLocked(fmt.Sprintf("[%s] TUN: total startup completed in %d ms", time.Now().Format(time.RFC3339), time.Since(startedAt).Milliseconds()))
 	}
 
 	return nil
@@ -334,7 +348,7 @@ func (m *Manager) stopLocked() error {
 		m.lastError = err.Error()
 		return err
 	}
-	if cleanupErr := m.cleanupStaleProcessesLocked(); cleanupErr != nil {
+	if cleanupErr := m.cleanupStaleProcessesLocked(m.binaryPath); cleanupErr != nil {
 		m.appendLogLocked("stale process cleanup error: " + cleanupErr.Error())
 	}
 
@@ -380,10 +394,14 @@ func (m *Manager) ensureBinaryLocked() error {
 }
 
 func (m *Manager) ensureRoutingAssetsLocked(cfg config.AppConfig) (string, error) {
-	return m.ensureRoutingAssetsLockedInternal(cfg.RulesProfile == config.RulesProfileRussia, false)
+	return m.ensureRoutingAssets(cfg.RulesProfile == config.RulesProfileRussia)
 }
 
-func (m *Manager) ensureRoutingAssetsLockedInternal(enabled bool, force bool) (string, error) {
+func (m *Manager) ensureRoutingAssets(enabled bool) (string, error) {
+	return m.ensureRoutingAssetsInternal(enabled, false)
+}
+
+func (m *Manager) ensureRoutingAssetsInternal(enabled bool, force bool) (string, error) {
 	assetDir, err := defaultAssetDir()
 	if err != nil {
 		return "", err
@@ -413,12 +431,12 @@ func (m *Manager) ensureRoutingAssetsLockedInternal(enabled bool, force bool) (s
 		}
 		if err := downloadFile(asset.url, path); err != nil {
 			if _, statErr := os.Stat(path); statErr == nil {
-				m.appendLogLocked(fmt.Sprintf("[%s] failed to refresh %s, using cached copy: %v", time.Now().Format(time.RFC3339), asset.name, err))
+				m.appendLog(fmt.Sprintf("[%s] failed to refresh %s, using cached copy: %v", time.Now().Format(time.RFC3339), asset.name, err))
 				continue
 			}
 			return "", fmt.Errorf("failed to download %s: %w", asset.name, err)
 		}
-		m.appendLogLocked(fmt.Sprintf("[%s] updated routing asset %s", time.Now().Format(time.RFC3339), asset.name))
+		m.appendLog(fmt.Sprintf("[%s] updated routing asset %s", time.Now().Format(time.RFC3339), asset.name))
 	}
 
 	if err := copyRoutingAssetsToBinaryDir(assetDir, filepath.Dir(m.binaryPath), required); err != nil {
@@ -426,6 +444,12 @@ func (m *Manager) ensureRoutingAssetsLockedInternal(enabled bool, force bool) (s
 	}
 
 	return assetDir, nil
+}
+
+func (m *Manager) appendLog(line string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.appendLogLocked(line)
 }
 
 func defaultAssetDir() (string, error) {
@@ -543,7 +567,8 @@ func (m *Manager) writeConfigLocked(cfg config.AppConfig, options xray.BuildOpti
 	}
 
 	path := filepath.Join(tempDir, "generated-config.json")
-	data, err := json.MarshalIndent(xray.BuildWithOptions(cfg, options), "", "  ")
+	payload := xray.BuildWithOptions(cfg, options)
+	data, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {
 		return "", err
 	}
@@ -595,7 +620,7 @@ func (m *Manager) waitForExit(cmd *exec.Cmd) {
 		m.lastExit = "xray exited cleanly"
 		m.appendLogLocked(m.lastExit)
 	}
-	if cleanupErr := m.cleanupStaleProcessesLocked(); cleanupErr != nil {
+	if cleanupErr := m.cleanupStaleProcessesLocked(m.binaryPath); cleanupErr != nil {
 		m.appendLogLocked("stale process cleanup error: " + cleanupErr.Error())
 	}
 
@@ -667,14 +692,14 @@ func (m *Manager) isRunningLocked() bool {
 	return m.running && m.cmd != nil && m.cmd.Process != nil
 }
 
-func (m *Manager) cleanupStaleProcessesLocked() error {
+func (m *Manager) cleanupStaleProcessesLocked(binaryPath string) error {
 	currentPID := 0
 	if m.cmd != nil && m.cmd.Process != nil {
 		currentPID = m.cmd.Process.Pid
 	}
 
 	if runtime.GOOS == "windows" {
-		pids, err := findBinaryProcessIDs(m.binaryPath)
+		pids, err := findBinaryProcessIDs(binaryPath)
 		if err != nil {
 			return err
 		}
@@ -703,7 +728,7 @@ func (m *Manager) cleanupStaleProcessesLocked() error {
 			}
 		}
 	}
-	if byBinary, err := findUnixBinaryProcessIDs(m.binaryPath); err == nil {
+	if byBinary, err := findUnixBinaryProcessIDs(binaryPath); err == nil {
 		for _, pid := range byBinary {
 			pids[pid] = struct{}{}
 		}
@@ -993,7 +1018,7 @@ func (m *Manager) refreshRuntimeMetrics(cfg config.AppConfig) {
 	}
 	m.downloadBps = downloadBps
 	m.uploadBps = uploadBps
-	m.ready = m.running && (m.latencyMS > 0 || m.publicIP != "")
+	m.ready = m.running && (m.mode == "tun" || m.latencyMS > 0 || m.publicIP != "")
 }
 
 func measureLatency(cfg config.AppConfig) int {
@@ -1034,7 +1059,7 @@ func dialDiagnosticTarget(cfg config.AppConfig, address string) (net.Conn, error
 }
 
 func lookupExternalIP(cfg config.AppConfig) (string, error) {
-	request, err := http.NewRequest(http.MethodGet, "https://api.ipify.org?format=json", nil)
+	request, err := http.NewRequest(http.MethodGet, "https://api4.ipify.org?format=json", nil)
 	if err != nil {
 		return "", err
 	}

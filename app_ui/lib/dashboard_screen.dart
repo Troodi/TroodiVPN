@@ -239,7 +239,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             ),
                             SizedBox(width: 10),
                             Text(
-                              tr('Applying...', 'Применение...'),
+                              tr('Applying...'),
                               style: TextStyle(
                                 color: AppPalette.homeText,
                                 fontSize: 13,
@@ -282,7 +282,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   const Icon(Icons.cloud_off_rounded, size: 44),
                   const SizedBox(height: 12),
                   Text(
-                    tr('Backend unavailable', 'Backend недоступен'),
+                    tr('Backend unavailable'),
                     style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
                   ),
                   const SizedBox(height: 10),
@@ -296,7 +296,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   FilledButton.icon(
                     onPressed: _refreshState,
                     icon: const Icon(Icons.refresh_rounded),
-                    label: Text(tr('Retry', 'Повторить')),
+                    label: Text(tr('Retry')),
                   ),
                 ],
               ),
@@ -359,19 +359,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
           destinations: [
             NavigationDestination(
               icon: const Icon(Icons.home_outlined),
-              label: loc(appLanguage, 'Home', 'Главная'),
+              label: loc(appLanguage, 'Home'),
             ),
             NavigationDestination(
               icon: const Icon(Icons.rule_folder_outlined),
-              label: loc(appLanguage, 'Rules', 'Правила'),
+              label: loc(appLanguage, 'Rules'),
             ),
             NavigationDestination(
               icon: const Icon(Icons.dns_outlined),
-              label: loc(appLanguage, 'Profiles', 'Профили'),
+              label: loc(appLanguage, 'Profiles'),
             ),
             NavigationDestination(
               icon: const Icon(Icons.tune_outlined),
-              label: loc(appLanguage, 'Settings', 'Настройки'),
+              label: loc(appLanguage, 'Settings'),
             ),
           ],
         ),
@@ -470,10 +470,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         return;
       }
       _showMessage(
-        tr(
-          'Backend did not respond in time. The change may still apply shortly.',
-          'Backend не ответил вовремя. Изменение может примениться чуть позже.',
-        ),
+        tr('Backend did not respond in time. The change may still apply shortly.'),
         isError: true,
       );
     } catch (error) {
@@ -493,8 +490,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _toggleConnection() async {
     if (connection == ConnectionStateValue.disconnected && !hasActiveProfile) {
       _showMessage(
-        tr('Select or create a profile first.',
-            'Сначала выберите или создайте профиль.'),
+        tr('Select or create a profile first.'),
         isError: true,
       );
       return;
@@ -534,10 +530,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         return;
       }
       _showMessage(
-        tr(
-          'Connection is taking too long. Check Logs. If Xray starts, the status will update automatically.',
-          'Подключение занимает слишком много времени. Проверьте логи. Если Xray запустится, статус обновится автоматически.',
-        ),
+        tr('Connection is taking too long. Check Logs. If Xray starts, the status will update automatically.'),
         isError: true,
       );
     } catch (error) {
@@ -645,8 +638,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     if (mounted) {
       _showMessage(tr(
-          'Approve the administrator prompt. Waiting for elevated backend...',
-          'Подтвердите запрос администратора. Ожидание backend с повышенными правами...'));
+          'Approve the administrator prompt. Waiting for elevated backend...'));
     }
 
     for (var attempt = 0; attempt < 20; attempt++) {
@@ -672,9 +664,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       setState(() {
         isElevationInProgress = false;
       });
-      _showMessage(
-          tr('Failed to reconnect to an elevated backend.',
-              'Не удалось переподключиться к backend с повышенными правами.'),
+      _showMessage(tr('Failed to reconnect to an elevated backend.'),
           isError: true);
     }
     return false;
@@ -747,8 +737,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         'Last error: ${runtimeStatus.lastError}',
       if (runtimeStatus.lastExit.isNotEmpty)
         'Last exit: ${runtimeStatus.lastExit}',
-      if (runtimeStatus.logs.isEmpty)
-        tr('No logs captured yet.', 'Логи пока не записаны.'),
+      if (runtimeStatus.logs.isEmpty) tr('No logs captured yet.'),
       ...runtimeStatus.logs,
     ];
 
@@ -756,7 +745,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: Text(tr('Xray logs', 'Логи Xray')),
+          title: Text(tr('Xray logs')),
           content: SizedBox(
             width: 720,
             child: SingleChildScrollView(
@@ -766,7 +755,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: Text(tr('Close', 'Закрыть')),
+              child: Text(tr('Close')),
             ),
           ],
         );
@@ -816,8 +805,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     _MainConnectionCard(
                       profileName: hasActiveProfile
                           ? activeProfile.name
-                          : loc(appLanguage, 'Select VPN Server',
-                              'Выберите VPN-сервер'),
+                          : loc(appLanguage, 'Select VPN Server'),
                       connection: connection,
                       isConnecting: isConnecting,
                       canConnect: canConnect,
@@ -840,12 +828,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     if (!canConnect) ...[
                       const SizedBox(height: 16),
                       _HintCard(
-                        title: loc(appLanguage, 'No profile selected',
-                            'Профиль не выбран'),
+                        title: loc(appLanguage, 'No profile selected'),
                         description: loc(
                           appLanguage,
                           'Open Profiles, import or create a profile, then select it on this screen.',
-                          'Откройте Профили, импортируйте или создайте профиль, затем выберите его на этом экране.',
                         ),
                         icon: Icons.info_outline_rounded,
                       ),
@@ -920,16 +906,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
         final List<Widget> columns = [
           _RulesColumnCard(
-            title: tr('Via VPN', 'Через VPN'),
-            subtitle: tr('Use VPN for these domains',
-                'Использовать VPN для этих доменов'),
+            title: tr('Via VPN'),
+            subtitle: tr('Use VPN for these domains'),
             placeholder: 'github.com',
             accent: const Color(0xFF68D6A1),
             rules: vpnRules,
             errorText: vpnInputError,
             searchController: vpnSearchController,
             inputController: proxyController,
-            emptyText: tr('No VPN rules yet.', 'Правил VPN пока нет.'),
+            emptyText: tr('No VPN rules yet.'),
             onChanged: () => setState(() {}),
             onAdd: () => _addRuleToBucket(RuleBucket.vpn),
             onPaste: () => _pasteRulesToBucket(RuleBucket.vpn),
@@ -940,16 +925,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
             onEditRule: (rule) => _editRule(rule),
           ),
           _RulesColumnCard(
-            title: tr('Open normally', 'Открывать напрямую'),
-            subtitle: tr('Bypass VPN for these domains',
-                'Обходить VPN для этих доменов'),
+            title: tr('Open normally'),
+            subtitle: tr('Bypass VPN for these domains'),
             placeholder: 'bank.ru',
             accent: const Color(0xFF97A8FF),
             rules: directRules,
             errorText: directInputError,
             searchController: directSearchController,
             inputController: directController,
-            emptyText: tr('No direct rules yet.', 'Прямых правил пока нет.'),
+            emptyText: tr('No direct rules yet.'),
             onChanged: () => setState(() {}),
             onAdd: () => _addRuleToBucket(RuleBucket.direct),
             onPaste: () => _pasteRulesToBucket(RuleBucket.direct),
@@ -960,17 +944,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
             onEditRule: (rule) => _editRule(rule),
           ),
           _RulesColumnCard(
-            title: tr('Blocked', 'Заблокировано'),
-            subtitle: tr('Drop traffic for these domains',
-                'Блокировать трафик для этих доменов'),
+            title: tr('Blocked'),
+            subtitle: tr('Drop traffic for these domains'),
             placeholder: 'ads.example.com',
             accent: const Color(0xFFFF9E8B),
             rules: blockedRules,
             errorText: blockedInputError,
             searchController: blockedSearchController,
             inputController: blockedController,
-            emptyText:
-                tr('No blocked rules yet.', 'Заблокированных правил пока нет.'),
+            emptyText: tr('No blocked rules yet.'),
             onChanged: () => setState(() {}),
             onAdd: () => _addRuleToBucket(RuleBucket.blocked),
             onPaste: () => _pasteRulesToBucket(RuleBucket.blocked),
@@ -1137,10 +1119,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       return;
     }
     if (current.contains(normalized)) {
-      _setInputError(
-          bucket,
-          tr('This rule already exists in the list.',
-              'Такое правило уже есть в списке.'));
+      _setInputError(bucket, tr('This rule already exists in the list.'));
       return;
     }
 
@@ -1176,9 +1155,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     final current = List<String>.from(_rulesForBucketValues(rule.bucket));
     if (current.contains(nextValue)) {
-      _showMessage(tr(
-          'This rule already exists in ${_bucketTitle(rule.bucket)}.',
-          'Такое правило уже есть в разделе ${_bucketTitle(rule.bucket)}.'));
+      _showMessage(
+          tr('This rule already exists in ${_bucketTitle(rule.bucket)}.'));
       return;
     }
 
@@ -1198,7 +1176,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (!mounted) {
       return;
     }
-    _showMessage(tr('Rule updated.', 'Правило обновлено.'));
+    _showMessage(tr('Rule updated.'));
   }
 
   void _setRuleEnabled(RuleBucket bucket, String value, bool enabled) {
@@ -1252,9 +1230,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       return;
     }
 
-    _showMessage(addedCount == 1
-        ? tr('1 rule added.', 'Добавлено 1 правило.')
-        : tr('$addedCount rules added.', 'Добавлено правил: $addedCount.'));
+    _showMessage(
+        addedCount == 1 ? tr('1 rule added.') : tr('$addedCount rules added.'));
   }
 
   Future<void> _confirmResetRules() async {
@@ -1266,7 +1243,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              tr('Reset rules', 'Сбросить правила'),
+              tr('Reset rules'),
               style: TextStyle(
                 color: AppPalette.homeText.withValues(alpha: 0.96),
                 fontSize: 22,
@@ -1275,10 +1252,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              tr(
-                'This will clear Via VPN, Open normally, and Blocked lists.',
-                'Это очистит списки «Через VPN», «Открывать напрямую» и «Заблокировано».',
-              ),
+              tr('This will clear Via VPN, Open normally, and Blocked lists.'),
               style: TextStyle(
                 color: AppPalette.homeTextMuted.withValues(alpha: 0.84),
                 height: 1.45,
@@ -1289,12 +1263,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 _DialogSecondaryButton(
-                  label: tr('Cancel', 'Отмена'),
+                  label: tr('Cancel'),
                   onPressed: () => Navigator.of(context).pop(false),
                 ),
                 const SizedBox(width: 10),
                 _DialogPrimaryButton(
-                  label: tr('Reset', 'Сбросить'),
+                  label: tr('Reset'),
                   onPressed: () => Navigator.of(context).pop(true),
                 ),
               ],
@@ -1330,11 +1304,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String _bucketTitle(RuleBucket bucket) {
     switch (bucket) {
       case RuleBucket.vpn:
-        return tr('Via VPN', 'Через VPN');
+        return tr('Via VPN');
       case RuleBucket.direct:
-        return tr('Open normally', 'Открывать напрямую');
+        return tr('Open normally');
       case RuleBucket.blocked:
-        return tr('Blocked', 'Заблокировано');
+        return tr('Blocked');
     }
   }
 
@@ -1539,33 +1513,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     final cards = [
                       _ProfileActionCard(
                         icon: Icons.content_paste_rounded,
-                        title: tr(
-                            'Import from clipboard', 'Импорт из буфера обмена'),
+                        title: tr('Import from clipboard'),
                         description: tr(
-                          'Paste one or several VPN links and add profiles instantly.',
-                          'Вставьте одну или несколько VPN-ссылок и сразу добавьте профили.',
-                        ),
-                        primaryLabel: tr('Paste link', 'Вставить ссылку'),
+                            'Paste one or several VPN links and add profiles instantly.'),
+                        primaryLabel: tr('Paste link'),
                         onPressed: _importProfileFromClipboard,
                       ),
                       _ProfileActionCard(
                         icon: Icons.upload_file_rounded,
-                        title: tr('Import file', 'Импорт файла'),
+                        title: tr('Import file'),
                         description: tr(
                           'Load configuration from a local .txt or .json file.',
-                          'Загрузите конфигурацию из локального .txt или .json файла.',
                         ),
-                        primaryLabel: tr('Upload file', 'Загрузить файл'),
+                        primaryLabel: tr('Upload file'),
                         onPressed: _importProfilesFromFile,
                       ),
                       _ProfileActionCard(
                         icon: Icons.edit_note_rounded,
-                        title: tr('Manual import', 'Ручной импорт'),
+                        title: tr('Manual import'),
                         description: tr(
-                          'Fill the fields manually and add a VPN profile.',
-                          'Заполните поля вручную и добавьте VPN-профиль.',
-                        ),
-                        primaryLabel: tr('Add manually', 'Добавить вручную'),
+                            'Fill the fields manually and add a VPN profile.'),
+                        primaryLabel: tr('Add manually'),
                         onPressed: _showManualProfileImportDialog,
                       ),
                     ];
@@ -1595,15 +1563,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 const SizedBox(height: 22),
                 _ProfilesSectionHeader(
-                  title: tr('Added profiles', 'Добавленные профили'),
+                  title: tr('Added profiles'),
                   trailing: SizedBox(
                     width: constraints.maxWidth > 920 ? 320 : double.infinity,
                     child: TextField(
                       controller: searchController,
                       onChanged: (_) => setState(() {}),
                       decoration: InputDecoration(
-                        hintText: tr('Search profiles, SNI or address',
-                            'Поиск профилей, SNI или адреса'),
+                        hintText: tr('Search profiles, SNI or address'),
                         prefixIcon: const Icon(Icons.search_rounded),
                         filled: true,
                         fillColor: Colors.white.withValues(alpha: 0.06),
@@ -1614,10 +1581,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 const SizedBox(height: 12),
                 if (profileRows.isEmpty)
                   _HintCard(
-                    title: tr('No profiles yet', 'Профилей пока нет'),
+                    title: tr('No profiles yet'),
                     description: tr(
                       'Import a profile from clipboard or add it manually to start.',
-                      'Импортируйте профиль из буфера или добавьте его вручную, чтобы начать.',
                     ),
                     icon: Icons.account_tree_outlined,
                   )
@@ -1694,7 +1660,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       children: [
         const SizedBox(height: 8),
         _MobileTopBar(
-          title: loc(appLanguage, 'Settings', 'Настройки'),
+          title: loc(appLanguage, 'Settings'),
           trailing: Icons.menu,
           titleAlign: Alignment.centerLeft,
         ),
@@ -1704,39 +1670,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
           child: ListView(
             padding: const EdgeInsets.symmetric(vertical: 10),
             children: [
-              _SectionLabel(loc(appLanguage, 'Settings', 'Настройки')),
+              _SectionLabel(loc(appLanguage, 'Settings')),
               _SettingsSimpleTile(
                 icon: Icons.palette_outlined,
-                title: loc(appLanguage, 'Theme Mode', 'Тема'),
+                title: loc(appLanguage, 'Theme Mode'),
                 onTap: () => _showMessage(
-                  loc(appLanguage, 'Theme switch will be added next.',
-                      'Переключение темы будет добавлено позже.'),
+                  loc(appLanguage, 'Theme switch will be added next.'),
                 ),
               ),
               _SettingsSimpleTile(
                 icon: Icons.language,
-                title: loc(appLanguage, 'Language', 'Язык'),
+                title: loc(appLanguage, 'Language'),
                 onTap: () => _showMessage(
-                  loc(appLanguage, 'Language picker is in the sidebar.',
-                      'Переключатель языка находится в боковом меню.'),
+                  loc(appLanguage, 'Language picker is in the sidebar.'),
                 ),
               ),
               _SettingsSimpleTile(
                 icon: Icons.refresh,
-                title: loc(
-                    appLanguage, 'Check for Updates', 'Проверить обновления'),
+                title: loc(appLanguage, 'Check for Updates'),
                 onTap: () => _showMessage(
-                  loc(appLanguage, 'No updates available right now.',
-                      'Сейчас обновлений нет.'),
+                  loc(appLanguage, 'No updates available right now.'),
                 ),
               ),
               const SizedBox(height: 14),
-              _SectionLabel(loc(appLanguage, 'Connection', 'Подключение')),
+              _SectionLabel(loc(appLanguage, 'Connection')),
               _SettingsSwitchTile(
                 icon: Icons.shield_rounded,
-                title: loc(appLanguage, 'VPN (TUN) Mode', 'Режим VPN (TUN)'),
-                subtitle: loc(appLanguage, 'Protect all applications',
-                    'Защищать все приложения'),
+                title: loc(appLanguage, 'VPN (TUN) Mode'),
+                subtitle: loc(appLanguage, 'Protect all applications'),
                 value: tunEnabled,
                 onChanged: (value) async {
                   if (value) {
@@ -1755,10 +1716,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               _SettingsSwitchTile(
                 icon: Icons.launch_rounded,
-                title: loc(
-                    appLanguage, 'Launch at startup', 'Запускать при старте'),
-                subtitle: loc(appLanguage, 'Start with last selected profile',
-                    'Запускать с последним выбранным профилем'),
+                title: loc(appLanguage, 'Launch at startup'),
+                subtitle: loc(appLanguage, 'Start with last selected profile'),
                 value: launchAtStartup,
                 onChanged: (value) => _saveConfig(
                   _currentConfig().copyWith(launchAtStartup: value),
@@ -1766,32 +1725,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               _SettingsSimpleTile(
                 icon: Icons.terminal_rounded,
-                title: loc(appLanguage, 'Open Logs', 'Открыть логи'),
+                title: loc(appLanguage, 'Open Logs'),
                 onTap: _showLogsDialog,
               ),
               const SizedBox(height: 14),
-              _SectionLabel(loc(appLanguage, 'About Us', 'О приложении')),
+              _SectionLabel(loc(appLanguage, 'About Us')),
               _SettingsSimpleTile(
                 icon: Icons.privacy_tip_outlined,
-                title: loc(appLanguage, 'Privacy Policy',
-                    'Политика конфиденциальности'),
+                title: loc(appLanguage, 'Privacy Policy'),
                 onTap: () => _showMessage(
-                  loc(appLanguage, 'Privacy Policy page is not connected yet.',
-                      'Страница политики конфиденциальности пока не подключена.'),
+                  loc(appLanguage, 'Privacy Policy page is not connected yet.'),
                 ),
               ),
               _SettingsSimpleTile(
                 icon: Icons.description_outlined,
-                title: loc(
-                    appLanguage, 'Terms of Service', 'Условия использования'),
+                title: loc(appLanguage, 'Terms of Service'),
                 onTap: () => _showMessage(
-                  loc(appLanguage, 'Terms page is not connected yet.',
-                      'Страница условий пока не подключена.'),
+                  loc(appLanguage, 'Terms page is not connected yet.'),
                 ),
               ),
               _SettingsSimpleTile(
                 icon: Icons.info_outline,
-                title: loc(appLanguage, 'About', 'О программе'),
+                title: loc(appLanguage, 'About'),
                 onTap: () => _showMessage('Troodi VPN • Flutter + Go + Xray'),
               ),
             ],
@@ -1831,8 +1786,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final clipboard = await Clipboard.getData('text/plain');
     final raw = clipboard?.text?.trim() ?? '';
     if (raw.isEmpty) {
-      _showMessage(tr('Clipboard is empty.', 'Буфер обмена пуст.'),
-          isError: true);
+      _showMessage(tr('Clipboard is empty.'), isError: true);
       return;
     }
     try {
@@ -1841,10 +1795,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (mounted) {
         _showMessage(
           imported.length == 1
-              ? tr('Profile imported from clipboard.',
-                  'Профиль импортирован из буфера обмена.')
-              : tr('${imported.length} profiles imported from clipboard.',
-                  'Из буфера обмена импортировано профилей: ${imported.length}.'),
+              ? tr('Profile imported from clipboard.')
+              : tr('${imported.length} profiles imported from clipboard.'),
         );
       }
     } catch (error) {
@@ -1886,7 +1838,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
     if (mounted) {
       _showMessage(
-        tr('Profile updated.', 'Профиль обновлён.'),
+        tr('Profile updated.'),
       );
     }
   }
@@ -1906,9 +1858,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (mounted) {
       _showMessage(
         imported.length == 1
-            ? tr('Profile added.', 'Профиль добавлен.')
-            : tr('${imported.length} profiles added.',
-                'Добавлено профилей: ${imported.length}.'),
+            ? tr('Profile added.')
+            : tr('${imported.length} profiles added.'),
       );
     }
   }
@@ -1941,10 +1892,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       return;
     }
     _showMessage(
-      tr(
-        'Profile data copied to clipboard.',
-        'Данные профиля скопированы в буфер обмена.',
-      ),
+      tr('Profile data copied to clipboard.'),
     );
   }
 
@@ -1963,7 +1911,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final content = await file.readAsString();
       if (content.trim().isEmpty) {
         _showMessage(
-          tr('Selected file is empty.', 'Выбранный файл пуст.'),
+          tr('Selected file is empty.'),
           isError: true,
         );
         return;
@@ -1978,11 +1926,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         imported.length == 1
             ? tr(
                 'Profile imported from file.',
-                'Профиль импортирован из файла.',
               )
             : tr(
                 '${imported.length} profiles imported from file.',
-                'Из файла импортировано профилей: ${imported.length}.',
               ),
       );
     } catch (error) {
@@ -2026,7 +1972,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       throw Exception(
         tr(
           'Unsupported JSON file format.',
-          'Неподдерживаемый формат JSON-файла.',
         ),
       );
     }
@@ -2051,8 +1996,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     await apply(merged);
     if (mounted) {
-      _showMessage(tr('Rules pasted from clipboard.',
-          'Правила вставлены из буфера обмена.'));
+      _showMessage(tr('Rules pasted from clipboard.'));
     }
   }
 
@@ -2064,7 +2008,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final result = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(tr('Paste list', 'Вставить список')),
+        title: Text(tr('Paste list')),
         content: SizedBox(
           width: 620,
           child: Column(
@@ -2072,7 +2016,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                tr('Supported formats', 'Поддерживаемые форматы'),
+                tr('Supported formats'),
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
@@ -2098,11 +2042,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: Text(tr('Cancel', 'Отмена')),
+            child: Text(tr('Cancel')),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(controller.text),
-            child: Text(tr('Apply', 'Применить')),
+            child: Text(tr('Apply')),
           ),
         ],
       ),
@@ -2168,13 +2112,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   String? _validateRuleValue(String value) {
     if (value.isEmpty) {
-      return tr('Enter a domain, IP, or CIDR rule.',
-          'Введите домен, IP или CIDR-правило.');
+      return tr('Enter a domain, IP, or CIDR rule.');
     }
     final type = _detectRuleType(value);
     if (type == null) {
-      return tr('Use a valid domain, wildcard, IP, or CIDR.',
-          'Используйте корректный домен, wildcard, IP или CIDR.');
+      return tr('Use a valid domain, wildcard, IP, or CIDR.');
     }
     return null;
   }
@@ -2297,7 +2239,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (_ruleMatches(item, value)) {
         return _RuleTestResult(
           input: value,
-          destination: tr('Blocked', 'Заблокировано'),
+          destination: tr('Blocked'),
           matchedRule: item,
           accent: const Color(0xFFFF9E8B),
           hasMatch: true,
@@ -2312,7 +2254,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         if (_ruleMatches(item, value)) {
           return _RuleTestResult(
             input: value,
-            destination: tr('Via VPN', 'Через VPN'),
+            destination: tr('Via VPN'),
             matchedRule: item,
             accent: const Color(0xFF6BD7AE),
             hasMatch: true,
@@ -2323,12 +2265,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
       return _RuleTestResult(
         input: value,
-        destination: tr('Open normally', 'Открывать напрямую'),
+        destination: tr('Open normally'),
         matchedRule: '',
         accent: const Color(0xFF8EA2FF),
         hasMatch: false,
         typeLabel: '',
-        defaultBehavior: tr('Open normally', 'Открывать напрямую'),
+        defaultBehavior: tr('Open normally'),
       );
     }
 
@@ -2336,7 +2278,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (_ruleMatches(item, value)) {
         return _RuleTestResult(
           input: value,
-          destination: tr('Open normally', 'Открывать напрямую'),
+          destination: tr('Open normally'),
           matchedRule: item,
           accent: const Color(0xFF8EA2FF),
           hasMatch: true,
@@ -2350,7 +2292,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (_isPrivateIpValue(value)) {
         return _RuleTestResult(
           input: value,
-          destination: tr('Open normally', 'Открывать напрямую'),
+          destination: tr('Open normally'),
           matchedRule: 'geoip:private',
           accent: const Color(0xFF8EA2FF),
           hasMatch: true,
@@ -2362,7 +2304,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (_isLikelyRussianRoute(value)) {
         return _RuleTestResult(
           input: value,
-          destination: tr('Open normally', 'Открывать напрямую'),
+          destination: tr('Open normally'),
           matchedRule: 'geosite:ru / geoip:ru',
           accent: const Color(0xFF8EA2FF),
           hasMatch: true,
@@ -2373,13 +2315,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
       return _RuleTestResult(
         input: value,
-        destination: tr('Via VPN', 'Через VPN'),
+        destination: tr('Via VPN'),
         matchedRule: '',
         accent: const Color(0xFF6BD7AE),
         hasMatch: false,
         typeLabel: '',
-        defaultBehavior:
-            tr('Russia Smart default', 'Поведение Russia Smart по умолчанию'),
+        defaultBehavior: tr('Russia Smart default'),
       );
     }
 
@@ -2387,12 +2328,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
         routingMode == RoutingMode.global) {
       return _RuleTestResult(
         input: value,
-        destination: tr('Via VPN', 'Через VPN'),
+        destination: tr('Via VPN'),
         matchedRule: '',
         accent: const Color(0xFF6BD7AE),
         hasMatch: false,
         typeLabel: '',
-        defaultBehavior: tr('Via VPN', 'Через VPN'),
+        defaultBehavior: tr('Via VPN'),
       );
     }
 

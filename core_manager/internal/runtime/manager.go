@@ -1022,6 +1022,21 @@ func (m *Manager) refreshRuntimeMetrics(cfg config.AppConfig) {
 }
 
 func measureLatency(cfg config.AppConfig) int {
+	profile := activeProfile(cfg)
+	if profile.Address != "" && profile.Port > 0 {
+		address := net.JoinHostPort(profile.Address, strconv.Itoa(profile.Port))
+		startedAt := time.Now()
+		conn, err := net.DialTimeout("tcp", address, 2*time.Second)
+		if err == nil {
+			_ = conn.Close()
+			latency := int(time.Since(startedAt).Milliseconds())
+			if latency == 0 {
+				return 1
+			}
+			return latency
+		}
+	}
+
 	startedAt := time.Now()
 	conn, err := dialDiagnosticTarget(cfg, "8.8.8.8:53")
 	if err != nil {

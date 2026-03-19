@@ -20,48 +20,30 @@ enum RuleBucket { vpn, direct, blocked }
 
 enum RulesProfile { global, russia }
 
-enum AppLanguage { en, ru, zh, fa }
+enum AppLanguage { en, ru, zh }
 
 AppLanguage _activeLanguage = AppLanguage.ru;
 
 extension AppLanguageX on AppLanguage {
-  String get flag => switch (this) {
-        AppLanguage.en => '🇬🇧',
-        AppLanguage.ru => '🇷🇺',
-        AppLanguage.zh => '🇨🇳',
-        AppLanguage.fa => '🇮🇷',
-      };
-
   String get label => switch (this) {
         AppLanguage.en => 'English',
-        AppLanguage.ru => 'Русский',
-        AppLanguage.zh => '中文',
-        AppLanguage.fa => 'فارسی',
+        AppLanguage.ru => '\u0420\u0443\u0441\u0441\u043a\u0438\u0439',
+        AppLanguage.zh => '\u4e2d\u6587',
       };
 
   String get shortLabel => switch (this) {
         AppLanguage.en => 'EN',
         AppLanguage.ru => 'RU',
         AppLanguage.zh => 'ZH',
-        AppLanguage.fa => 'FA',
       };
-}
 
-String loc(AppLanguage language, String en, String ru) {
-  switch (language) {
-    case AppLanguage.en:
-      return en;
-    case AppLanguage.ru:
-      return ru;
-    case AppLanguage.zh:
-    case AppLanguage.fa:
-      final key = '$en|$ru';
-      return _localizedOverrides[key]?[language] ?? en;
-  }
-}
+  String get flag => shortLabel;
 
-String tr(String en, String ru) {
-  return loc(_activeLanguage, en, ru);
+  Color get accent => switch (this) {
+        AppLanguage.en => const Color(0xFF7FA8FF),
+        AppLanguage.ru => const Color(0xFF7ED2FF),
+        AppLanguage.zh => const Color(0xFFFF8F70),
+      };
 }
 
 class AppPalette {

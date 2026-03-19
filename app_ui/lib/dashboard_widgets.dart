@@ -107,7 +107,7 @@ class _Sidebar extends StatelessWidget {
             const SizedBox(height: 8),
           ],
           const Spacer(),
-          _LanguageSwitcher(
+          _LanguagePicker(
             value: language,
             onChanged: onLanguageChanged,
           ),
@@ -229,7 +229,7 @@ class _Sidebar extends StatelessWidget {
                 const SizedBox(height: 14),
                 Text(
                   hasActiveProfile
-                      ? '${tr('Routing', 'Маршрутизация')}: ${routingMode.name} • DNS: ${dnsMode.name.toUpperCase()}'
+                      ? '${tr('Routing')}: ${routingMode.name} / DNS: ${dnsMode.name.toUpperCase()}'
                       : loc(
                           language,
                           'Open Profiles, import or create a profile, then select it on this screen.',
@@ -1521,7 +1521,7 @@ class _ProfilesInfoPanel extends StatelessWidget {
                             Text(
                               [
                                 if (profile!.transport.isNotEmpty)
-                                  '${tr('Transport', 'Транспорт')}: ${profile!.transport}',
+                                  '${tr('Transport')}: ${profile!.transport}',
                                 if (profile!.host.isNotEmpty)
                                   'Host: ${profile!.host}',
                                 if (profile!.path.isNotEmpty)
@@ -1530,7 +1530,7 @@ class _ProfilesInfoPanel extends StatelessWidget {
                                   'ALPN: ${profile!.alpn}',
                                 if (profile!.fingerprint.isNotEmpty)
                                   'uTLS: ${profile!.fingerprint}',
-                              ].join('  •  '),
+                              ].join(' / '),
                               style: TextStyle(
                                 color: AppPalette.homeTextMuted
                                     .withValues(alpha: 0.82),
@@ -2589,7 +2589,7 @@ class _RoutingTreeCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Routing preview',
+            tr('Routing preview'),
             style: TextStyle(
               color: AppPalette.homeText.withValues(alpha: 0.96),
               fontSize: 18,
@@ -2598,7 +2598,7 @@ class _RoutingTreeCard extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Text(
-            'Internet',
+            tr('Internet'),
             style: TextStyle(
               color: AppPalette.homeText.withValues(alpha: 0.92),
               fontSize: 14,
@@ -2606,14 +2606,14 @@ class _RoutingTreeCard extends StatelessWidget {
             ),
           ),
           Text(
-            '  │\n  ▼',
+            '  |\n  v',
             style: TextStyle(
               color: AppPalette.homeTextMuted.withValues(alpha: 0.8),
               height: 1.15,
             ),
           ),
           Text(
-            'VPN tunnel',
+            tr('VPN tunnel'),
             style: TextStyle(
               color: AppPalette.homeText.withValues(alpha: 0.92),
               fontSize: 14,
@@ -2623,15 +2623,15 @@ class _RoutingTreeCard extends StatelessWidget {
           const SizedBox(height: 8),
           if (routingMode == RoutingMode.whitelist) ...[
             for (final item in vpnDomains.take(3))
-              _RoutingTreeLine(label: '$item → Via VPN'),
-            const _RoutingTreeLine(
-              label: 'Other traffic → Open normally',
+              _RoutingTreeLine(label: '$item -> ${tr('Via VPN')}'),
+            _RoutingTreeLine(
+              label: tr('Other traffic → Open normally'),
               faded: true,
             ),
           ] else ...[
             for (final item in directDomains.take(3))
-              _RoutingTreeLine(label: '$item → Direct'),
-            const _RoutingTreeLine(label: 'Other traffic → VPN'),
+              _RoutingTreeLine(label: '$item -> ${tr('Open normally')}'),
+            _RoutingTreeLine(label: tr('Other traffic → VPN')),
           ],
         ],
       ),
@@ -2653,7 +2653,7 @@ class _RoutingTreeLine extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(top: 4),
       child: Text(
-        '  ├── $label',
+        '  +-- $label',
         style: TextStyle(
           color: faded
               ? AppPalette.homeTextMuted.withValues(alpha: 0.72)
@@ -6342,6 +6342,232 @@ ServerProfile _parseProfileInput(String input) {
     password: scheme == 'trojan' ? credential : '',
     rawLink: raw,
   );
+}
+
+class _LanguagePicker extends StatelessWidget {
+  const _LanguagePicker({
+    required this.value,
+    required this.onChanged,
+  });
+
+  final AppLanguage value;
+  final ValueChanged<AppLanguage> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          tr('Language'),
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: AppPalette.homeText.withValues(alpha: 0.86),
+          ),
+        ),
+        const SizedBox(height: 10),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            return MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: PopupMenuButton<AppLanguage>(
+                tooltip: '',
+                position: PopupMenuPosition.under,
+                offset: const Offset(0, 8),
+                elevation: 18,
+                padding: EdgeInsets.zero,
+                color: const Color(0xFF222846),
+                constraints: BoxConstraints.tightFor(
+                  width: constraints.maxWidth,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(18),
+                  side: BorderSide(
+                    color: Colors.white.withValues(alpha: 0.08),
+                  ),
+                ),
+                onSelected: onChanged,
+                itemBuilder: (context) => AppLanguage.values
+                    .map(
+                      (language) => PopupMenuItem<AppLanguage>(
+                        value: language,
+                        padding: EdgeInsets.zero,
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          child: Row(
+                            children: [
+                              _LanguageFlagIcon(language: language),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  language.label,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: AppPalette.homeText
+                                        .withValues(alpha: 0.96),
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              SizedBox(
+                                width: 26,
+                                child: Text(
+                                  language.shortLabel,
+                                  textAlign: TextAlign.right,
+                                  style: TextStyle(
+                                    color: AppPalette.homeTextMuted
+                                        .withValues(alpha: 0.78),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    )
+                    .toList(growable: false),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 13,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.08),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      _LanguageFlagIcon(language: value),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          value.label,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: AppPalette.homeText.withValues(alpha: 0.96),
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        value.shortLabel,
+                        style: TextStyle(
+                          color:
+                              AppPalette.homeTextMuted.withValues(alpha: 0.78),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        size: 20,
+                        color: AppPalette.homeTextMuted.withValues(alpha: 0.88),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
+class _LanguageFlagIcon extends StatelessWidget {
+  const _LanguageFlagIcon({
+    required this.language,
+  });
+
+  final AppLanguage language;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 20,
+      height: 14,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(4),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.14),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(4),
+        child: switch (language) {
+          AppLanguage.en => Stack(
+              fit: StackFit.expand,
+              children: [
+                Container(color: const Color(0xFFF5F7FB)),
+                Column(
+                  children: List.generate(
+                    7,
+                    (index) => Expanded(
+                      child: Container(
+                        color: index.isEven
+                            ? const Color(0xFFD85C69)
+                            : const Color(0xFFF5F7FB),
+                      ),
+                    ),
+                  ),
+                ),
+                Align(
+                  alignment: Alignment.topLeft,
+                  child: Container(
+                    width: 9,
+                    height: 8,
+                    color: const Color(0xFF3D4D96),
+                  ),
+                ),
+              ],
+            ),
+          AppLanguage.ru => Column(
+              children: const [
+                Expanded(child: ColoredBox(color: Color(0xFFF7F8FB))),
+                Expanded(child: ColoredBox(color: Color(0xFF4E78DB))),
+                Expanded(child: ColoredBox(color: Color(0xFFD85C69))),
+              ],
+            ),
+          AppLanguage.zh => Stack(
+              fit: StackFit.expand,
+              children: const [
+                ColoredBox(color: Color(0xFFD74B43)),
+                Positioned(
+                  top: 1,
+                  left: 2,
+                  child: Icon(
+                    Icons.star_rounded,
+                    size: 8,
+                    color: Color(0xFFF6D04D),
+                  ),
+                ),
+              ],
+            ),
+        },
+      ),
+    );
+  }
 }
 
 String _profileId(String seed) {

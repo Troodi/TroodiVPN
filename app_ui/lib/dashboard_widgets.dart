@@ -4892,7 +4892,7 @@ class _LanguageSwitcher extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          loc(value, 'Language', 'Язык'),
+          tr('Language', 'Язык'),
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w700,
@@ -4900,70 +4900,114 @@ class _LanguageSwitcher extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 10),
-        Row(
-          children: AppLanguage.values
-              .map(
-                (language) => Expanded(
-                  child: Padding(
-                    padding: EdgeInsets.only(
-                      right: language == AppLanguage.values.first ? 8 : 0,
-                    ),
+        MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: DropdownButtonFormField<AppLanguage>(
+            initialValue: value,
+            isExpanded: true,
+            menuMaxHeight: 280,
+            borderRadius: BorderRadius.circular(20),
+            elevation: 18,
+            dropdownColor: const Color(0xFF222846),
+            iconEnabledColor: AppPalette.homeTextMuted.withValues(alpha: 0.88),
+            style: TextStyle(
+              color: AppPalette.homeText.withValues(alpha: 0.96),
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+            decoration: InputDecoration(
+              isDense: true,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+              filled: true,
+              fillColor: Colors.white.withValues(alpha: 0.06),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide.none,
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide(
+                  color: Colors.white.withValues(alpha: 0.08),
+                ),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide(
+                  color: AppPalette.homeAccent.withValues(alpha: 0.30),
+                ),
+              ),
+            ),
+            selectedItemBuilder: (context) => AppLanguage.values
+                .map(
+                  (language) => Row(
+                    children: [
+                      Text(language.flag, style: const TextStyle(fontSize: 18)),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          language.label,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: AppPalette.homeText.withValues(alpha: 0.96),
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+                .toList(growable: false),
+            items: AppLanguage.values
+                .map(
+                  (language) => DropdownMenuItem<AppLanguage>(
+                    value: language,
                     child: MouseRegion(
                       cursor: SystemMouseCursors.click,
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(16),
-                        onTap: () => onChanged(language),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 160),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 12,
-                          ),
-                          decoration: BoxDecoration(
-                            gradient: value == language
-                                ? const LinearGradient(
-                                    colors: [
-                                      AppPalette.homeAccent,
-                                      AppPalette.homeAccentStrong,
-                                    ],
-                                  )
-                                : null,
-                            color: value == language
-                                ? null
-                                : Colors.white.withValues(alpha: 0.06),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: value == language
-                                  ? Colors.white.withValues(alpha: 0.18)
-                                  : Colors.white.withValues(alpha: 0.08),
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(language.flag,
-                                  style: const TextStyle(fontSize: 16)),
-                              const SizedBox(width: 8),
-                              Text(
-                                language.shortLabel,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        child: Row(
+                          children: [
+                            Text(language.flag,
+                                style: const TextStyle(fontSize: 18)),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                language.label,
+                                overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w700,
-                                  color: value == language
-                                      ? Colors.white
-                                      : AppPalette.homeText
-                                          .withValues(alpha: 0.86),
+                                  color: AppPalette.homeText
+                                      .withValues(alpha: 0.96),
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
-                            ],
-                          ),
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              language.shortLabel,
+                              style: TextStyle(
+                                color: AppPalette.homeTextMuted
+                                    .withValues(alpha: 0.78),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
                   ),
-                ),
-              )
-              .toList(growable: false),
+                )
+                .toList(growable: false),
+            onChanged: (language) {
+              if (language != null) {
+                onChanged(language);
+              }
+            },
+          ),
         ),
       ],
     );

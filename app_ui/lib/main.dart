@@ -10,6 +10,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:http/http.dart' as http;
 
 part 'app_theme.dart';
+part 'app_localizations.dart';
 part 'app_models.dart';
 part 'backend.dart';
 part 'dashboard_screen.dart';

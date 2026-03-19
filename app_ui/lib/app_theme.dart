@@ -20,20 +20,44 @@ enum RuleBucket { vpn, direct, blocked }
 
 enum RulesProfile { global, russia }
 
-enum AppLanguage { en, ru }
+enum AppLanguage { en, ru, zh, fa }
 
 AppLanguage _activeLanguage = AppLanguage.ru;
 
 extension AppLanguageX on AppLanguage {
-  String get flag => this == AppLanguage.ru ? '🇷🇺' : '🇬🇧';
+  String get flag => switch (this) {
+        AppLanguage.en => '🇬🇧',
+        AppLanguage.ru => '🇷🇺',
+        AppLanguage.zh => '🇨🇳',
+        AppLanguage.fa => '🇮🇷',
+      };
 
-  String get label => this == AppLanguage.ru ? 'Русский' : 'English';
+  String get label => switch (this) {
+        AppLanguage.en => 'English',
+        AppLanguage.ru => 'Русский',
+        AppLanguage.zh => '中文',
+        AppLanguage.fa => 'فارسی',
+      };
 
-  String get shortLabel => this == AppLanguage.ru ? 'RU' : 'EN';
+  String get shortLabel => switch (this) {
+        AppLanguage.en => 'EN',
+        AppLanguage.ru => 'RU',
+        AppLanguage.zh => 'ZH',
+        AppLanguage.fa => 'FA',
+      };
 }
 
 String loc(AppLanguage language, String en, String ru) {
-  return language == AppLanguage.ru ? ru : en;
+  switch (language) {
+    case AppLanguage.en:
+      return en;
+    case AppLanguage.ru:
+      return ru;
+    case AppLanguage.zh:
+    case AppLanguage.fa:
+      final key = '$en|$ru';
+      return _localizedOverrides[key]?[language] ?? en;
+  }
 }
 
 String tr(String en, String ru) {

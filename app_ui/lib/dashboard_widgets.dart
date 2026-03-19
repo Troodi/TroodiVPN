@@ -485,9 +485,13 @@ class _RegionPresetCard extends StatelessWidget {
 }
 
 class _ProfileDetailsCard extends StatelessWidget {
-  const _ProfileDetailsCard({required this.profile});
+  const _ProfileDetailsCard({
+    required this.profile,
+    this.compact = false,
+  });
 
   final ServerProfile profile;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -501,18 +505,31 @@ class _ProfileDetailsCard extends StatelessWidget {
       if (profile.spiderX.isNotEmpty) 'spx ${profile.spiderX}',
     ];
 
-    return Card(
-      elevation: 0,
-      color: AppPalette.card.withValues(alpha: 0.82),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.white.withValues(alpha: 0.10),
+            Colors.white.withValues(alpha: 0.05),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+        boxShadow: [AppShadows.darkCard],
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: EdgeInsets.all(compact ? 18 : 20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(tr('Profile details', 'Детали профиля'),
-                style:
-                    const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+                style: TextStyle(
+                  fontSize: compact ? 18 : 20,
+                  fontWeight: FontWeight.w700,
+                  color: AppPalette.homeText.withValues(alpha: 0.96),
+                )),
             const SizedBox(height: 8),
             _StatusRow(label: tr('Name', 'Имя'), value: profile.name),
             const SizedBox(height: 10),
@@ -529,7 +546,9 @@ class _ProfileDetailsCard extends StatelessWidget {
             const SizedBox(height: 10),
             _StatusRow(
               label: 'SNI',
-              value: profile.sni.isEmpty ? 'Not specified' : profile.sni,
+              value: profile.sni.isEmpty
+                  ? tr('Not specified', 'Не указано')
+                  : profile.sni,
             ),
             const SizedBox(height: 10),
             _StatusRow(
@@ -546,29 +565,37 @@ class _ProfileDetailsCard extends StatelessWidget {
             const SizedBox(height: 10),
             _StatusRow(
               label: 'ALPN',
-              value: profile.alpn.isEmpty ? 'Not specified' : profile.alpn,
+              value: profile.alpn.isEmpty
+                  ? tr('Not specified', 'Не указано')
+                  : profile.alpn,
             ),
             const SizedBox(height: 10),
             _StatusRow(
               label: tr('Fingerprint', 'Fingerprint'),
               value: profile.fingerprint.isEmpty
-                  ? 'Not specified'
+                  ? tr('Not specified', 'Не указано')
                   : profile.fingerprint,
             ),
             const SizedBox(height: 10),
             _StatusRow(
               label: 'Flow',
-              value: profile.flow.isEmpty ? 'Not specified' : profile.flow,
+              value: profile.flow.isEmpty
+                  ? tr('Not specified', 'Не указано')
+                  : profile.flow,
             ),
             const SizedBox(height: 10),
             _StatusRow(
               label: 'Host / path',
-              value: hostPath.isEmpty ? 'Not specified' : hostPath.join('  '),
+              value: hostPath.isEmpty
+                  ? tr('Not specified', 'Не указано')
+                  : hostPath.join('  '),
             ),
             const SizedBox(height: 10),
             _StatusRow(
               label: 'Reality',
-              value: reality.isEmpty ? 'Not specified' : reality.join('  '),
+              value: reality.isEmpty
+                  ? tr('Not specified', 'Не указано')
+                  : reality.join('  '),
             ),
             const SizedBox(height: 10),
             _StatusRow(
@@ -585,10 +612,17 @@ class _ProfileDetailsCard extends StatelessWidget {
                 width: double.infinity,
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF7F3EC),
+                  color: Colors.white.withValues(alpha: 0.06),
                   borderRadius: BorderRadius.circular(18),
+                  border:
+                      Border.all(color: Colors.white.withValues(alpha: 0.08)),
                 ),
-                child: SelectableText(profile.rawLink),
+                child: SelectableText(
+                  profile.rawLink,
+                  style: TextStyle(
+                    color: AppPalette.homeText.withValues(alpha: 0.9),
+                  ),
+                ),
               ),
             ],
           ],
@@ -645,6 +679,913 @@ class _MobileTopBar extends StatelessWidget {
             trailingIsCrown
                 ? const _CrownBadge()
                 : _CircleGhostIcon(icon: trailing, visible: trailing != null),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ProfilesWorkspaceCard extends StatelessWidget {
+  const _ProfilesWorkspaceCard({
+    required this.mode,
+    required this.onModeChanged,
+    required this.child,
+  });
+
+  final ProfilesWorkspaceMode mode;
+  final ValueChanged<ProfilesWorkspaceMode> onModeChanged;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.white.withValues(alpha: 0.08),
+            Colors.white.withValues(alpha: 0.04),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(32),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+        boxShadow: [AppShadows.darkCard],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 22, 24, 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _ProfilesToolbar(
+              mode: mode,
+              onModeChanged: onModeChanged,
+            ),
+            const SizedBox(height: 18),
+            Divider(color: Colors.white.withValues(alpha: 0.08), height: 1),
+            const SizedBox(height: 22),
+            child,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ProfilesToolbar extends StatelessWidget {
+  const _ProfilesToolbar({
+    required this.mode,
+    required this.onModeChanged,
+  });
+
+  final ProfilesWorkspaceMode mode;
+  final ValueChanged<ProfilesWorkspaceMode> onModeChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      children: [
+        _ProfilesModePill(
+          icon: Icons.travel_explore_rounded,
+          label: tr('Add', 'Добавление'),
+          selected: mode == ProfilesWorkspaceMode.add,
+          onTap: () => onModeChanged(ProfilesWorkspaceMode.add),
+        ),
+        _ProfilesModePill(
+          icon: Icons.lock_open_rounded,
+          label: tr('Export', 'Экспорт'),
+          selected: mode == ProfilesWorkspaceMode.export,
+          onTap: () => onModeChanged(ProfilesWorkspaceMode.export),
+        ),
+        _ProfilesModePill(
+          icon: Icons.info_outline_rounded,
+          label: tr('Profile info', 'О профиле'),
+          selected: mode == ProfilesWorkspaceMode.edit,
+          onTap: () => onModeChanged(ProfilesWorkspaceMode.edit),
+        ),
+      ],
+    );
+  }
+}
+
+class _ProfilesModePill extends StatelessWidget {
+  const _ProfilesModePill({
+    required this.icon,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            gradient: selected
+                ? const LinearGradient(
+                    colors: [
+                      AppPalette.homeAccent,
+                      AppPalette.homeAccentStrong,
+                    ],
+                  )
+                : null,
+            color: selected ? null : Colors.white.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: selected
+                  ? Colors.white.withValues(alpha: 0.18)
+                  : Colors.white.withValues(alpha: 0.08),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                size: 18,
+                color: AppPalette.homeText.withValues(alpha: 0.92),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                label,
+                style: TextStyle(
+                  color: AppPalette.homeText.withValues(alpha: 0.96),
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ProfileActionCard extends StatelessWidget {
+  const _ProfileActionCard({
+    required this.icon,
+    required this.title,
+    required this.description,
+    required this.primaryLabel,
+    required this.onPressed,
+    this.footer,
+  });
+
+  final IconData icon;
+  final String title;
+  final String description;
+  final String primaryLabel;
+  final VoidCallback onPressed;
+  final String? footer;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 320,
+      padding: const EdgeInsets.fromLTRB(22, 24, 22, 20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.white.withValues(alpha: 0.08),
+            Colors.white.withValues(alpha: 0.04),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        boxShadow: [AppShadows.darkCard],
+      ),
+      child: Column(
+        children: [
+          Container(
+            width: 62,
+            height: 62,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(18),
+              gradient: const LinearGradient(
+                colors: [
+                  AppPalette.homeAccent,
+                  AppPalette.homeAccentStrong,
+                ],
+              ),
+              boxShadow: [AppShadows.glow(AppPalette.homeAccent)],
+            ),
+            child: Icon(icon, color: Colors.white, size: 30),
+          ),
+          const SizedBox(height: 22),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: AppPalette.homeText.withValues(alpha: 0.96),
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            description,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: AppPalette.homeTextMuted.withValues(alpha: 0.86),
+              fontSize: 14,
+              height: 1.5,
+            ),
+          ),
+          const Spacer(),
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            child: _DialogPrimaryButton(
+              label: primaryLabel,
+              onPressed: onPressed,
+            ),
+          ),
+          if (footer != null) ...[
+            const SizedBox(height: 14),
+            Text(
+              footer!,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: AppPalette.homeTextMuted.withValues(alpha: 0.72),
+                fontSize: 12,
+                height: 1.4,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfilesSectionHeader extends StatelessWidget {
+  const _ProfilesSectionHeader({
+    required this.title,
+    this.trailing,
+  });
+
+  final String title;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final isCompact = MediaQuery.of(context).size.width < 920;
+    if (isCompact || trailing == null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              color: AppPalette.homeText.withValues(alpha: 0.96),
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          if (trailing != null) ...[
+            const SizedBox(height: 12),
+            trailing!,
+          ],
+        ],
+      );
+    }
+
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            title,
+            style: TextStyle(
+              color: AppPalette.homeText.withValues(alpha: 0.96),
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        const SizedBox(width: 16),
+        trailing!,
+      ],
+    );
+  }
+}
+
+class _ProfileRowCard extends StatelessWidget {
+  const _ProfileRowCard({
+    required this.profile,
+    required this.isActive,
+    required this.onUse,
+    required this.onDetails,
+    required this.onDelete,
+  });
+
+  final ServerProfile profile;
+  final bool isActive;
+  final VoidCallback onUse;
+  final VoidCallback onDetails;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            isActive
+                ? AppPalette.homeAccent.withValues(alpha: 0.22)
+                : Colors.white.withValues(alpha: 0.08),
+            isActive
+                ? AppPalette.homeAccentStrong.withValues(alpha: 0.14)
+                : Colors.white.withValues(alpha: 0.04),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: isActive
+              ? AppPalette.homeAccent.withValues(alpha: 0.42)
+              : Colors.white.withValues(alpha: 0.08),
+        ),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 760;
+
+          Widget infoBlock() {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      _guessFlagFromName('${profile.name} ${profile.address}'),
+                      style: const TextStyle(fontSize: 30),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        profile.name,
+                        style: TextStyle(
+                          color: AppPalette.homeText.withValues(alpha: 0.96),
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '${profile.protocol.toUpperCase()} • ${profile.address.isEmpty ? tr('no endpoint', 'адрес не указан') : '${profile.address}:${profile.port}'}',
+                  style: TextStyle(
+                    color: AppPalette.homeTextMuted.withValues(alpha: 0.88),
+                    fontSize: 14,
+                  ),
+                ),
+                if (profile.transport.isNotEmpty ||
+                    profile.security.isNotEmpty ||
+                    profile.sni.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    [
+                      if (profile.transport.isNotEmpty) profile.transport,
+                      if (profile.security.isNotEmpty) profile.security,
+                      if (profile.sni.isNotEmpty) 'SNI ${profile.sni}',
+                    ].join(' • '),
+                    style: TextStyle(
+                      color: AppPalette.homeTextMuted.withValues(alpha: 0.66),
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ],
+            );
+          }
+
+          final actions = Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              _MiniActionButton(
+                label: tr('Edit', 'Редактировать'),
+                icon: Icons.edit_outlined,
+                primary: true,
+                onPressed: onDetails,
+              ),
+              _MiniActionButton(
+                label: isActive
+                    ? tr('Selected', 'Выбран')
+                    : tr('Use', 'Использовать'),
+                icon: Icons.check_circle_outline_rounded,
+                success: isActive,
+                onPressed: onUse,
+              ),
+              _MiniActionButton(
+                label: tr('Delete', 'Удалить'),
+                icon: Icons.delete_outline_rounded,
+                destructive: true,
+                onPressed: onDelete,
+              ),
+            ],
+          );
+
+          if (compact) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                infoBlock(),
+                const SizedBox(height: 14),
+                actions,
+              ],
+            );
+          }
+
+          return Row(
+            children: [
+              Expanded(child: infoBlock()),
+              const SizedBox(width: 16),
+              Flexible(child: actions),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _MiniActionButton extends StatelessWidget {
+  const _MiniActionButton({
+    required this.label,
+    required this.icon,
+    required this.onPressed,
+    this.primary = false,
+    this.destructive = false,
+    this.success = false,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback onPressed;
+  final bool primary;
+  final bool destructive;
+  final bool success;
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = destructive
+        ? const Color(0xFF7A3846).withValues(alpha: 0.85)
+        : success
+            ? const Color(0xFF2F7A56).withValues(alpha: 0.88)
+            : primary
+                ? AppPalette.homeAccent.withValues(alpha: 0.92)
+                : Colors.white.withValues(alpha: 0.08);
+    final border = destructive
+        ? const Color(0xFFFF9E8B).withValues(alpha: 0.20)
+        : success
+            ? const Color(0xFF84E0AE).withValues(alpha: 0.24)
+            : primary
+                ? Colors.white.withValues(alpha: 0.14)
+                : Colors.white.withValues(alpha: 0.08);
+    final fg = destructive
+        ? const Color(0xFFFFB7A8)
+        : success
+            ? const Color(0xFFE5FFF1)
+            : AppPalette.homeText.withValues(alpha: 0.94);
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: TextButton.icon(
+        onPressed: onPressed,
+        style: TextButton.styleFrom(
+          foregroundColor: fg,
+          backgroundColor: bg,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(color: border),
+          ),
+        ),
+        icon: Icon(icon, size: 16),
+        label: Text(
+          label,
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ProfilesExportPanel extends StatelessWidget {
+  const _ProfilesExportPanel({
+    required this.profiles,
+    required this.searchController,
+    required this.onSearchChanged,
+    required this.onCopy,
+  });
+
+  final List<ServerProfile> profiles;
+  final TextEditingController searchController;
+  final ValueChanged<String> onSearchChanged;
+  final ValueChanged<ServerProfile> onCopy;
+
+  @override
+  Widget build(BuildContext context) {
+    if (profiles.isEmpty) {
+      return _HintCard(
+        title: tr('No profiles to export', 'Нет профилей для экспорта'),
+        description: tr(
+          'Add or select profiles first, then copy a link or JSON for any of them.',
+          'Сначала добавьте профили, затем можно скопировать ссылку или JSON для любого из них.',
+        ),
+        icon: Icons.file_download_outlined,
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _ProfilesSectionHeader(
+          title: tr('Export profiles', 'Экспорт профилей'),
+          trailing: SizedBox(
+            width: 320,
+            child: TextField(
+              controller: searchController,
+              onChanged: onSearchChanged,
+              decoration: InputDecoration(
+                hintText: tr(
+                  'Search by profile, host or protocol',
+                  'Поиск по профилю, хосту или протоколу',
+                ),
+                prefixIcon: const Icon(Icons.search_rounded),
+                filled: true,
+                fillColor: Colors.white.withValues(alpha: 0.06),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 14),
+        Column(
+          children: [
+            for (final profile in profiles) ...[
+              _ProfileExportRow(
+                profile: profile,
+                onCopy: () => onCopy(profile),
+              ),
+              if (profile != profiles.last) const SizedBox(height: 12),
+            ],
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _ProfileExportRow extends StatelessWidget {
+  const _ProfileExportRow({
+    required this.profile,
+    required this.onCopy,
+  });
+
+  final ServerProfile profile;
+  final VoidCallback onCopy;
+
+  @override
+  Widget build(BuildContext context) {
+    final preview = profile.rawLink.isNotEmpty
+        ? profile.rawLink
+        : const JsonEncoder.withIndent('  ')
+            .convert(_serverProfileToJson(profile));
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                _guessFlagFromName('${profile.name} ${profile.address}'),
+                style: const TextStyle(fontSize: 30),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      profile.name,
+                      style: TextStyle(
+                        color: AppPalette.homeText.withValues(alpha: 0.96),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      '${profile.protocol.toUpperCase()} • ${profile.address.isEmpty ? tr('no endpoint', 'адрес не указан') : '${profile.address}:${profile.port}'}',
+                      style: TextStyle(
+                        color: AppPalette.homeTextMuted.withValues(alpha: 0.84),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(
+                width: 210,
+                child: _DialogPrimaryButton(
+                  label: tr('Copy profile', 'Скопировать'),
+                  onPressed: onCopy,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          SelectableText(
+            preview,
+            maxLines: 3,
+            style: TextStyle(
+              color: AppPalette.homeTextMuted.withValues(alpha: 0.84),
+              height: 1.4,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfilesInfoPanel extends StatelessWidget {
+  const _ProfilesInfoPanel({
+    required this.profile,
+    required this.routingMode,
+    required this.rulesProfile,
+    required this.dnsMode,
+    required this.tunnelMode,
+    required this.vpnRuleCount,
+    required this.directRuleCount,
+    required this.blockedRuleCount,
+  });
+
+  final ServerProfile? profile;
+  final RoutingMode routingMode;
+  final RulesProfile rulesProfile;
+  final DnsMode dnsMode;
+  final TunnelMode tunnelMode;
+  final int vpnRuleCount;
+  final int directRuleCount;
+  final int blockedRuleCount;
+
+  @override
+  Widget build(BuildContext context) {
+    if (profile == null) {
+      return _HintCard(
+        title: tr('No selected profile', 'Нет выбранного профиля'),
+        description: tr(
+          'Select a profile first to see the current connection summary.',
+          'Сначала выберите профиль, чтобы увидеть сводную информацию о подключении.',
+        ),
+        icon: Icons.info_outline_rounded,
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _ProfilesSectionHeader(
+          title: tr('Current profile', 'Текущий профиль'),
+        ),
+        const SizedBox(height: 14),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _guessFlagFromName('${profile!.name} ${profile!.address}'),
+                style: const TextStyle(fontSize: 32),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      profile!.name,
+                      style: TextStyle(
+                        color: AppPalette.homeText.withValues(alpha: 0.96),
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: [
+                        _InfoStatChip(
+                          label: tr('Protocol', 'Протокол'),
+                          value: profile!.protocol.toUpperCase(),
+                        ),
+                        _InfoStatChip(
+                          label: tr('Address', 'Адрес'),
+                          value: profile!.address.isEmpty
+                              ? tr('not set', 'не задан')
+                              : '${profile!.address}:${profile!.port}',
+                        ),
+                        _InfoStatChip(
+                          label: 'SNI',
+                          value: profile!.sni.isEmpty
+                              ? tr('not set', 'не задан')
+                              : profile!.sni,
+                        ),
+                        _InfoStatChip(
+                          label: tr('Security', 'Безопасность'),
+                          value: profile!.security.isEmpty
+                              ? tr('not set', 'не задан')
+                              : profile!.security,
+                        ),
+                        _InfoStatChip(
+                          label: tr('Mode', 'Режим'),
+                          value: tunnelMode == TunnelMode.vpn
+                              ? tr('VPN (TUN)', 'VPN (TUN)')
+                              : tr('Proxy', 'Прокси'),
+                        ),
+                        _InfoStatChip(
+                          label: tr('Routing', 'Маршрутизация'),
+                          value: switch (routingMode) {
+                            RoutingMode.global =>
+                              tr('Protect all traffic', 'Защищать весь трафик'),
+                            RoutingMode.whitelist => tr('Only selected sites',
+                                'Только выбранные сайты'),
+                            RoutingMode.blacklist =>
+                              tr('Exclude sites', 'Исключать сайты'),
+                          },
+                        ),
+                        _InfoStatChip(
+                          label: tr('Profile', 'Профиль'),
+                          value: rulesProfile == RulesProfile.russia
+                              ? 'Russia'
+                              : 'Global',
+                        ),
+                        _InfoStatChip(
+                          label: 'DNS',
+                          value: switch (dnsMode) {
+                            DnsMode.auto => 'AUTO',
+                            DnsMode.proxy => 'PROXY',
+                            DnsMode.direct => 'DIRECT',
+                          },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.05),
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.08),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            tr('Routing summary', 'Сводка маршрутизации'),
+                            style: TextStyle(
+                              color:
+                                  AppPalette.homeText.withValues(alpha: 0.94),
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 10,
+                            runSpacing: 10,
+                            children: [
+                              _InfoStatChip(
+                                label: tr('Via VPN', 'Через VPN'),
+                                value: '$vpnRuleCount',
+                              ),
+                              _InfoStatChip(
+                                label: tr('Open normally', 'Напрямую'),
+                                value: '$directRuleCount',
+                              ),
+                              _InfoStatChip(
+                                label: tr('Blocked', 'Заблокировано'),
+                                value: '$blockedRuleCount',
+                              ),
+                            ],
+                          ),
+                          if (profile!.transport.isNotEmpty ||
+                              profile!.host.isNotEmpty ||
+                              profile!.path.isNotEmpty ||
+                              profile!.alpn.isNotEmpty ||
+                              profile!.fingerprint.isNotEmpty) ...[
+                            const SizedBox(height: 12),
+                            Text(
+                              [
+                                if (profile!.transport.isNotEmpty)
+                                  '${tr('Transport', 'Транспорт')}: ${profile!.transport}',
+                                if (profile!.host.isNotEmpty)
+                                  'Host: ${profile!.host}',
+                                if (profile!.path.isNotEmpty)
+                                  'Path: ${profile!.path}',
+                                if (profile!.alpn.isNotEmpty)
+                                  'ALPN: ${profile!.alpn}',
+                                if (profile!.fingerprint.isNotEmpty)
+                                  'uTLS: ${profile!.fingerprint}',
+                              ].join('  •  '),
+                              style: TextStyle(
+                                color: AppPalette.homeTextMuted
+                                    .withValues(alpha: 0.82),
+                                fontSize: 13,
+                                height: 1.5,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _InfoStatChip extends StatelessWidget {
+  const _InfoStatChip({
+    required this.label,
+    required this.value,
+  });
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: RichText(
+        text: TextSpan(
+          style: TextStyle(
+            color: AppPalette.homeTextMuted.withValues(alpha: 0.84),
+            fontSize: 13,
+          ),
+          children: [
+            TextSpan(text: '$label: '),
+            TextSpan(
+              text: value,
+              style: TextStyle(
+                color: AppPalette.homeText.withValues(alpha: 0.94),
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ],
         ),
       ),
@@ -4604,15 +5545,20 @@ class _ImportSectionCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFFF7F3EC),
+        color: Colors.white.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             title,
-            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+            style: TextStyle(
+              color: AppPalette.homeText.withValues(alpha: 0.94),
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+            ),
           ),
           const SizedBox(height: 12),
           child,
@@ -4625,14 +5571,22 @@ class _ImportSectionCard extends StatelessWidget {
 enum _ProfileImportMode { link, manual }
 
 class _ProfileImportDialog extends StatefulWidget {
-  const _ProfileImportDialog();
+  const _ProfileImportDialog({
+    this.initialMode = _ProfileImportMode.link,
+    this.showModeSwitcher = true,
+    this.initialProfile,
+  });
+
+  final _ProfileImportMode initialMode;
+  final bool showModeSwitcher;
+  final ServerProfile? initialProfile;
 
   @override
   State<_ProfileImportDialog> createState() => _ProfileImportDialogState();
 }
 
 class _ProfileImportDialogState extends State<_ProfileImportDialog> {
-  _ProfileImportMode mode = _ProfileImportMode.link;
+  late _ProfileImportMode mode;
   String protocol = 'vless';
   String transport = 'tcp';
   String security = 'tls';
@@ -4653,6 +5607,41 @@ class _ProfileImportDialogState extends State<_ProfileImportDialog> {
   final spiderXController = TextEditingController(text: '/');
   final userIdController = TextEditingController();
   final passwordController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    mode = widget.initialMode;
+    final profile = widget.initialProfile;
+    if (profile != null) {
+      protocol = profile.protocol.isEmpty ? 'vless' : profile.protocol;
+      transport = profile.transport.isEmpty ? 'tcp' : profile.transport;
+      security = profile.security.isEmpty ? 'tls' : profile.security;
+      linkController.text = profile.rawLink;
+      nameController.text = profile.name;
+      addressController.text = profile.address;
+      if (profile.port > 0) {
+        portController.text = '${profile.port}';
+      }
+      sniController.text = profile.sni;
+      if (profile.alpn.isNotEmpty) {
+        alpnController.text = profile.alpn;
+      }
+      if (profile.fingerprint.isNotEmpty) {
+        fingerprintController.text = profile.fingerprint;
+      }
+      flowController.text = profile.flow;
+      hostController.text = profile.host;
+      pathController.text = profile.path;
+      realityPublicKeyController.text = profile.realityPublicKey;
+      realityShortIdController.text = profile.realityShortId;
+      if (profile.spiderX.isNotEmpty) {
+        spiderXController.text = profile.spiderX;
+      }
+      userIdController.text = profile.userId;
+      passwordController.text = profile.password;
+    }
+  }
 
   @override
   void dispose() {
@@ -4680,23 +5669,53 @@ class _ProfileImportDialogState extends State<_ProfileImportDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(tr('Import profile', 'Импорт профиля')),
-      content: SizedBox(
-        width: 720,
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+    return _DialogShell(
+      maxWidth: 980,
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              widget.initialProfile == null
+                  ? tr('Import profile', 'Импорт профиля')
+                  : tr('Edit profile', 'Редактирование профиля'),
+              style: TextStyle(
+                color: AppPalette.homeText.withValues(alpha: 0.96),
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              mode == _ProfileImportMode.manual
+                  ? tr(
+                      'Fill the main connection fields manually, similar to desktop clients.',
+                      'Заполните основные поля подключения вручную, как в настольных клиентах.',
+                    )
+                  : tr(
+                      'Paste one or several links and import profiles instantly.',
+                      'Вставьте одну или несколько ссылок и сразу импортируйте профили.',
+                    ),
+              style: TextStyle(
+                color: AppPalette.homeTextMuted.withValues(alpha: 0.82),
+                fontSize: 14,
+                height: 1.45,
+              ),
+            ),
+            if (widget.showModeSwitcher) ...[
+              const SizedBox(height: 18),
               SegmentedButton<_ProfileImportMode>(
                 showSelectedIcon: false,
+                style: AppUi.segmentedHeaderButton(),
                 segments: [
                   ButtonSegment(
-                      value: _ProfileImportMode.link,
-                      label: Text(tr('Link', 'Ссылка'))),
+                    value: _ProfileImportMode.link,
+                    label: Text(tr('Link', 'Ссылка')),
+                  ),
                   ButtonSegment(
-                      value: _ProfileImportMode.manual,
-                      label: Text(tr('Manual', 'Вручную'))),
+                    value: _ProfileImportMode.manual,
+                    label: Text(tr('Manual', 'Вручную')),
+                  ),
                 ],
                 selected: {mode},
                 onSelectionChanged: (selection) {
@@ -4706,246 +5725,403 @@ class _ProfileImportDialogState extends State<_ProfileImportDialog> {
                   });
                 },
               ),
-              const SizedBox(height: 18),
-              if (mode == _ProfileImportMode.link)
-                TextField(
-                  controller: linkController,
-                  minLines: 4,
-                  maxLines: 8,
-                  decoration: _dialogDecoration(
-                    'Paste one or several links: vless://..., trojan://..., vmess://...',
-                  ).copyWith(
-                    helperText:
-                        'You can paste multiple links separated by new lines.',
-                  ),
-                )
-              else
-                Column(
-                  children: [
-                    _ImportSectionCard(
-                      title: tr('Endpoint', 'Точка подключения'),
-                      child: Wrap(
-                        spacing: 12,
-                        runSpacing: 12,
-                        children: [
-                          SizedBox(
-                            width: 180,
-                            child: DropdownButtonFormField<String>(
-                              initialValue: protocol,
-                              decoration: _dialogDecoration('Protocol'),
-                              items: const [
-                                DropdownMenuItem(
-                                    value: 'vless', child: Text('VLESS')),
-                                DropdownMenuItem(
-                                    value: 'trojan', child: Text('Trojan')),
-                                DropdownMenuItem(
-                                    value: 'vmess', child: Text('VMess')),
-                                DropdownMenuItem(
-                                    value: 'shadowsocks',
-                                    child: Text('Shadowsocks')),
-                              ],
-                              onChanged: (value) => setState(() {
-                                protocol = value ?? 'vless';
-                              }),
-                            ),
-                          ),
-                          SizedBox(
-                            width: 240,
-                            child: TextField(
-                              controller: nameController,
-                              decoration: _dialogDecoration(
-                                  tr('Profile name', 'Имя профиля')),
-                            ),
-                          ),
-                          SizedBox(
-                            width: 220,
-                            child: TextField(
-                              controller: addressController,
-                              decoration: _dialogDecoration(
-                                  tr('Address / host', 'Адрес / хост')),
-                            ),
-                          ),
-                          SizedBox(
-                            width: 120,
-                            child: TextField(
-                              controller: portController,
-                              keyboardType: TextInputType.number,
-                              decoration: _dialogDecoration('Port'),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    _ImportSectionCard(
-                      title: tr('Transport and TLS', 'Транспорт и TLS'),
-                      child: Wrap(
-                        spacing: 12,
-                        runSpacing: 12,
-                        children: [
-                          SizedBox(
-                            width: 180,
-                            child: DropdownButtonFormField<String>(
-                              initialValue: transport,
-                              decoration: _dialogDecoration('Transport'),
-                              items: const [
-                                DropdownMenuItem(
-                                    value: 'tcp', child: Text('TCP')),
-                                DropdownMenuItem(
-                                    value: 'ws', child: Text('WebSocket')),
-                                DropdownMenuItem(
-                                    value: 'grpc', child: Text('gRPC')),
-                                DropdownMenuItem(
-                                    value: 'httpupgrade',
-                                    child: Text('HTTPUpgrade')),
-                              ],
-                              onChanged: (value) => setState(() {
-                                transport = value ?? 'tcp';
-                              }),
-                            ),
-                          ),
-                          SizedBox(
-                            width: 180,
-                            child: DropdownButtonFormField<String>(
-                              initialValue: security,
-                              decoration: _dialogDecoration('Security'),
-                              items: const [
-                                DropdownMenuItem(
-                                    value: 'tls', child: Text('TLS')),
-                                DropdownMenuItem(
-                                    value: 'reality', child: Text('Reality')),
-                                DropdownMenuItem(
-                                    value: 'none', child: Text('None')),
-                              ],
-                              onChanged: (value) => setState(() {
-                                security = value ?? 'tls';
-                              }),
-                            ),
-                          ),
-                          SizedBox(
-                            width: 220,
-                            child: TextField(
-                              controller: sniController,
-                              decoration: _dialogDecoration('SNI'),
-                            ),
-                          ),
-                          SizedBox(
-                            width: 220,
-                            child: TextField(
-                              controller: alpnController,
-                              decoration: _dialogDecoration('ALPN'),
-                            ),
-                          ),
-                          SizedBox(
-                            width: 220,
-                            child: TextField(
-                              controller: fingerprintController,
-                              decoration:
-                                  _dialogDecoration('Fingerprint / uTLS'),
-                            ),
-                          ),
-                          SizedBox(
-                            width: 220,
-                            child: TextField(
-                              controller: flowController,
-                              decoration: _dialogDecoration('Flow'),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    _ImportSectionCard(
-                      title: 'Transport details',
-                      child: Wrap(
-                        spacing: 12,
-                        runSpacing: 12,
-                        children: [
-                          SizedBox(
-                            width: 260,
-                            child: TextField(
-                              controller: hostController,
-                              decoration: _dialogDecoration('Host / authority'),
-                            ),
-                          ),
-                          SizedBox(
-                            width: 260,
-                            child: TextField(
-                              controller: pathController,
-                              decoration: _dialogDecoration('Path / service'),
-                            ),
-                          ),
-                          SizedBox(
-                            width: 260,
-                            child: TextField(
-                              controller: realityPublicKeyController,
-                              decoration:
-                                  _dialogDecoration('Reality public key'),
-                            ),
-                          ),
-                          SizedBox(
-                            width: 220,
-                            child: TextField(
-                              controller: realityShortIdController,
-                              decoration: _dialogDecoration('Reality short ID'),
-                            ),
-                          ),
-                          SizedBox(
-                            width: 180,
-                            child: TextField(
-                              controller: spiderXController,
-                              decoration: _dialogDecoration('Reality spiderX'),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    _ImportSectionCard(
-                      title: tr('Credentials', 'Учетные данные'),
-                      child: Wrap(
-                        spacing: 12,
-                        runSpacing: 12,
-                        children: [
-                          SizedBox(
-                            width: 280,
-                            child: TextField(
-                              controller: userIdController,
-                              decoration: _dialogDecoration('UUID / user'),
-                            ),
-                          ),
-                          SizedBox(
-                            width: 240,
-                            child: TextField(
-                              controller: passwordController,
-                              decoration:
-                                  _dialogDecoration(tr('Password', 'Пароль')),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              if (errorText != null) ...[
-                const SizedBox(height: 12),
-                Text(errorText!,
-                    style: const TextStyle(color: Color(0xFF8B3A3A))),
-              ],
             ],
-          ),
+            const SizedBox(height: 18),
+            if (mode == _ProfileImportMode.link)
+              TextField(
+                controller: linkController,
+                minLines: 5,
+                maxLines: 9,
+                style: TextStyle(
+                  color: AppPalette.homeText.withValues(alpha: 0.94),
+                ),
+                decoration: _dialogDecoration(
+                  tr(
+                    'Paste one or several links: vless://..., trojan://..., vmess://...',
+                    'Вставьте одну или несколько ссылок: vless://..., trojan://..., vmess://...',
+                  ),
+                ).copyWith(
+                  helperText: tr(
+                    'You can paste multiple links separated by new lines.',
+                    'Можно вставить несколько ссылок, разделив их переводами строки.',
+                  ),
+                ),
+              )
+            else
+              Column(
+                children: [
+                  _ImportSectionCard(
+                    title: tr('Endpoint', 'Точка подключения'),
+                    child: Wrap(
+                      spacing: 12,
+                      runSpacing: 12,
+                      children: [
+                        SizedBox(
+                          width: 180,
+                          child: DropdownButtonFormField<String>(
+                            initialValue: protocol,
+                            style: TextStyle(
+                              color:
+                                  AppPalette.homeText.withValues(alpha: 0.96),
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            dropdownColor: const Color(0xFF1C223C),
+                            decoration: _dialogDecoration(
+                              tr('Protocol', 'Протокол'),
+                            ),
+                            items: [
+                              DropdownMenuItem(
+                                  value: 'vless',
+                                  child: Text('VLESS',
+                                      style: TextStyle(
+                                          color: AppPalette.homeText))),
+                              DropdownMenuItem(
+                                  value: 'trojan',
+                                  child: Text('Trojan',
+                                      style: TextStyle(
+                                          color: AppPalette.homeText))),
+                              DropdownMenuItem(
+                                  value: 'vmess',
+                                  child: Text('VMess',
+                                      style: TextStyle(
+                                          color: AppPalette.homeText))),
+                              DropdownMenuItem(
+                                  value: 'shadowsocks',
+                                  child: Text('Shadowsocks',
+                                      style: TextStyle(
+                                          color: AppPalette.homeText))),
+                            ],
+                            onChanged: (value) => setState(() {
+                              protocol = value ?? 'vless';
+                            }),
+                          ),
+                        ),
+                        SizedBox(
+                          width: 240,
+                          child: TextField(
+                            controller: nameController,
+                            style: TextStyle(
+                              color:
+                                  AppPalette.homeText.withValues(alpha: 0.96),
+                            ),
+                            decoration: _dialogDecoration(
+                              tr('Alias / remarks', 'Имя профиля'),
+                            ),
+                          ),
+                        ),
+                        SizedBox(
+                          width: 220,
+                          child: TextField(
+                            controller: addressController,
+                            style: TextStyle(
+                              color:
+                                  AppPalette.homeText.withValues(alpha: 0.96),
+                            ),
+                            decoration: _dialogDecoration(
+                              tr('Address', 'Адрес'),
+                            ),
+                          ),
+                        ),
+                        SizedBox(
+                          width: 120,
+                          child: TextField(
+                            controller: portController,
+                            style: TextStyle(
+                              color:
+                                  AppPalette.homeText.withValues(alpha: 0.96),
+                            ),
+                            keyboardType: TextInputType.number,
+                            decoration: _dialogDecoration('Port'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  _ImportSectionCard(
+                    title: tr('Credentials', 'Учетные данные'),
+                    child: Wrap(
+                      spacing: 12,
+                      runSpacing: 12,
+                      children: [
+                        SizedBox(
+                          width: 280,
+                          child: TextField(
+                            controller: userIdController,
+                            style: TextStyle(
+                              color:
+                                  AppPalette.homeText.withValues(alpha: 0.96),
+                            ),
+                            decoration: _dialogDecoration('UUID / user'),
+                          ),
+                        ),
+                        SizedBox(
+                          width: 240,
+                          child: TextField(
+                            controller: passwordController,
+                            style: TextStyle(
+                              color:
+                                  AppPalette.homeText.withValues(alpha: 0.96),
+                            ),
+                            decoration: _dialogDecoration(
+                              tr('Password', 'Пароль'),
+                            ),
+                          ),
+                        ),
+                        SizedBox(
+                          width: 220,
+                          child: DropdownButtonFormField<String>(
+                            initialValue: security,
+                            style: TextStyle(
+                              color:
+                                  AppPalette.homeText.withValues(alpha: 0.96),
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            dropdownColor: const Color(0xFF1C223C),
+                            decoration: _dialogDecoration(
+                              tr('Security', 'Безопасность'),
+                            ),
+                            items: [
+                              DropdownMenuItem(
+                                  value: 'tls',
+                                  child: Text('TLS',
+                                      style: TextStyle(
+                                          color: AppPalette.homeText))),
+                              DropdownMenuItem(
+                                  value: 'reality',
+                                  child: Text('Reality',
+                                      style: TextStyle(
+                                          color: AppPalette.homeText))),
+                              DropdownMenuItem(
+                                  value: 'none',
+                                  child: Text('None',
+                                      style: TextStyle(
+                                          color: AppPalette.homeText))),
+                            ],
+                            onChanged: (value) => setState(() {
+                              security = value ?? 'tls';
+                            }),
+                          ),
+                        ),
+                        SizedBox(
+                          width: 220,
+                          child: TextField(
+                            controller: flowController,
+                            style: TextStyle(
+                              color:
+                                  AppPalette.homeText.withValues(alpha: 0.96),
+                            ),
+                            decoration: _dialogDecoration('Flow'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  _ImportSectionCard(
+                    title: tr('Transport', 'Транспорт'),
+                    child: Wrap(
+                      spacing: 12,
+                      runSpacing: 12,
+                      children: [
+                        SizedBox(
+                          width: 180,
+                          child: DropdownButtonFormField<String>(
+                            initialValue: transport,
+                            style: TextStyle(
+                              color:
+                                  AppPalette.homeText.withValues(alpha: 0.96),
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            dropdownColor: const Color(0xFF1C223C),
+                            decoration: _dialogDecoration(
+                              tr('Transport protocol', 'Протокол транспорта'),
+                            ),
+                            items: [
+                              DropdownMenuItem(
+                                  value: 'tcp',
+                                  child: Text('TCP',
+                                      style: TextStyle(
+                                          color: AppPalette.homeText))),
+                              DropdownMenuItem(
+                                  value: 'ws',
+                                  child: Text('WebSocket',
+                                      style: TextStyle(
+                                          color: AppPalette.homeText))),
+                              DropdownMenuItem(
+                                  value: 'grpc',
+                                  child: Text('gRPC',
+                                      style: TextStyle(
+                                          color: AppPalette.homeText))),
+                              DropdownMenuItem(
+                                  value: 'httpupgrade',
+                                  child: Text('HTTPUpgrade',
+                                      style: TextStyle(
+                                          color: AppPalette.homeText))),
+                            ],
+                            onChanged: (value) => setState(() {
+                              transport = value ?? 'tcp';
+                            }),
+                          ),
+                        ),
+                        SizedBox(
+                          width: 220,
+                          child: TextField(
+                            controller: hostController,
+                            style: TextStyle(
+                              color:
+                                  AppPalette.homeText.withValues(alpha: 0.96),
+                            ),
+                            decoration: _dialogDecoration(
+                              tr('Camouflage host', 'Host / authority'),
+                            ),
+                          ),
+                        ),
+                        SizedBox(
+                          width: 220,
+                          child: TextField(
+                            controller: pathController,
+                            style: TextStyle(
+                              color:
+                                  AppPalette.homeText.withValues(alpha: 0.96),
+                            ),
+                            decoration: _dialogDecoration('Path / service'),
+                          ),
+                        ),
+                        SizedBox(
+                          width: 220,
+                          child: TextField(
+                            controller: sniController,
+                            style: TextStyle(
+                              color:
+                                  AppPalette.homeText.withValues(alpha: 0.96),
+                            ),
+                            decoration: _dialogDecoration('SNI'),
+                          ),
+                        ),
+                        SizedBox(
+                          width: 220,
+                          child: TextField(
+                            controller: alpnController,
+                            style: TextStyle(
+                              color:
+                                  AppPalette.homeText.withValues(alpha: 0.96),
+                            ),
+                            decoration: _dialogDecoration('ALPN'),
+                          ),
+                        ),
+                        SizedBox(
+                          width: 220,
+                          child: TextField(
+                            controller: fingerprintController,
+                            style: TextStyle(
+                              color:
+                                  AppPalette.homeText.withValues(alpha: 0.96),
+                            ),
+                            decoration: _dialogDecoration('Fingerprint / uTLS'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  _ImportSectionCard(
+                    title: 'Reality',
+                    child: Wrap(
+                      spacing: 12,
+                      runSpacing: 12,
+                      children: [
+                        SizedBox(
+                          width: 260,
+                          child: TextField(
+                            controller: realityPublicKeyController,
+                            style: TextStyle(
+                              color:
+                                  AppPalette.homeText.withValues(alpha: 0.96),
+                            ),
+                            decoration: _dialogDecoration(
+                              tr('Reality public key',
+                                  'Публичный ключ Reality'),
+                            ),
+                          ),
+                        ),
+                        SizedBox(
+                          width: 220,
+                          child: TextField(
+                            controller: realityShortIdController,
+                            style: TextStyle(
+                              color:
+                                  AppPalette.homeText.withValues(alpha: 0.96),
+                            ),
+                            decoration: _dialogDecoration(
+                              tr('Reality short ID', 'Short ID Reality'),
+                            ),
+                          ),
+                        ),
+                        SizedBox(
+                          width: 220,
+                          child: TextField(
+                            controller: spiderXController,
+                            style: TextStyle(
+                              color:
+                                  AppPalette.homeText.withValues(alpha: 0.96),
+                            ),
+                            decoration: _dialogDecoration('SpiderX'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            if (errorText != null) ...[
+              const SizedBox(height: 14),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF7C343E).withValues(alpha: 0.90),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: const Color(0xFFFFA8A8).withValues(alpha: 0.16),
+                  ),
+                ),
+                child: Text(
+                  errorText!,
+                  style: const TextStyle(color: Colors.white),
+                ),
+              ),
+            ],
+            const SizedBox(height: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                SizedBox(
+                  width: 148,
+                  child: _DialogSecondaryButton(
+                    label: tr('Cancel', 'Отмена'),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                SizedBox(
+                  width: 220,
+                  child: _DialogPrimaryButton(
+                    label: tr('Save', 'Сохранить'),
+                    onPressed: _submit,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: Text(tr('Cancel', 'Отмена')),
-        ),
-        FilledButton(
-          onPressed: _submit,
-          child: Text(tr('Save', 'Сохранить')),
-        ),
-      ],
     );
   }
 
@@ -4953,10 +6129,28 @@ class _ProfileImportDialogState extends State<_ProfileImportDialog> {
     return InputDecoration(
       labelText: label,
       filled: true,
-      fillColor: const Color(0xFFF7F3EC),
+      fillColor: Colors.white.withValues(alpha: 0.08),
+      labelStyle: TextStyle(
+        color: AppPalette.homeTextMuted.withValues(alpha: 0.90),
+      ),
+      hintStyle: TextStyle(
+        color: AppPalette.homeTextMuted.withValues(alpha: 0.72),
+      ),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(18),
         borderSide: BorderSide.none,
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(18),
+        borderSide: BorderSide(
+          color: Colors.white.withValues(alpha: 0.08),
+        ),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(18),
+        borderSide: BorderSide(
+          color: AppPalette.homeAccent.withValues(alpha: 0.45),
+        ),
       ),
     );
   }
@@ -4982,10 +6176,10 @@ class _ProfileImportDialogState extends State<_ProfileImportDialog> {
       throw Exception('Manual profile requires name, address and valid port.');
     }
     return ServerProfile(
-      id: _profileId(name),
+      id: widget.initialProfile?.id ?? _profileId(name),
       name: name,
-      latencyMs: 0,
-      health: ProfileHealth.testing,
+      latencyMs: widget.initialProfile?.latencyMs ?? 0,
+      health: widget.initialProfile?.health ?? ProfileHealth.healthy,
       protocol: protocol,
       address: address,
       port: port,
@@ -5002,6 +6196,7 @@ class _ProfileImportDialogState extends State<_ProfileImportDialog> {
       spiderX: spiderXController.text.trim(),
       userId: userIdController.text.trim(),
       password: passwordController.text.trim(),
+      rawLink: widget.initialProfile?.rawLink ?? '',
     );
   }
 }
@@ -5113,4 +6308,30 @@ String _profileId(String seed) {
       .replaceAll(RegExp(r'^-|-$'), '');
   final suffix = DateTime.now().millisecondsSinceEpoch.toString();
   return normalized.isEmpty ? suffix : '$normalized-$suffix';
+}
+
+String _guessFlagFromName(String value) {
+  final v = value.toLowerCase();
+  if (v.contains('usa') || v.contains('us') || v.contains('new york')) {
+    return '🇺🇸';
+  }
+  if (v.contains('germany') || v.contains('de') || v.contains('frankfurt')) {
+    return '🇩🇪';
+  }
+  if (v.contains('france') || v.contains('paris') || v.contains('bordeaux')) {
+    return '🇫🇷';
+  }
+  if (v.contains('finland') || v.contains('helsinki')) {
+    return '🇫🇮';
+  }
+  if (v.contains('india') || v.contains('delhi')) {
+    return '🇮🇳';
+  }
+  if (v.contains('australia') || v.contains('perth')) {
+    return '🇦🇺';
+  }
+  if (v.contains('russia') || v.contains('ru') || v.contains('moscow')) {
+    return '🇷🇺';
+  }
+  return '🌐';
 }

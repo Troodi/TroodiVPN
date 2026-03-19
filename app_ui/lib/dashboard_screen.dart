@@ -21,6 +21,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool tunEnabled = false;
   bool launchAtStartup = true;
   AppLanguage appLanguage = AppLanguage.ru;
+  ProfilesWorkspaceMode profilesWorkspaceMode = ProfilesWorkspaceMode.add;
   AppPage selectedPage = AppPage.home;
   bool isLoading = true;
   bool isBusy = false;
@@ -1521,272 +1522,168 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildProfilesView() {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final list = Card(
-          elevation: 0,
-          color: AppPalette.card.withValues(alpha: 0.72),
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
+        final contentWidth = constraints.maxWidth >= 1200
+            ? constraints.maxWidth
+            : constraints.maxWidth;
+        final profileRows = filteredProfiles;
+
+        Widget workspaceBody;
+        switch (profilesWorkspaceMode) {
+          case ProfilesWorkspaceMode.add:
+            workspaceBody = Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(18),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF5477DF),
-                    borderRadius: BorderRadius.circular(24),
-                  ),
-                  child: Column(
-                    children: [
-                      Row(
+                LayoutBuilder(
+                  builder: (context, inner) {
+                    final isWide = inner.maxWidth >= 980;
+                    final cards = [
+                      _ProfileActionCard(
+                        icon: Icons.content_paste_rounded,
+                        title: tr(
+                            'Import from clipboard', 'Импорт из буфера обмена'),
+                        description: tr(
+                          'Paste one or several VPN links and add profiles instantly.',
+                          'Вставьте одну или несколько VPN-ссылок и сразу добавьте профили.',
+                        ),
+                        primaryLabel: tr('Paste link', 'Вставить ссылку'),
+                        onPressed: _importProfileFromClipboard,
+                      ),
+                      _ProfileActionCard(
+                        icon: Icons.upload_file_rounded,
+                        title: tr('Import file', 'Импорт файла'),
+                        description: tr(
+                          'Load configuration from a local .txt or .json file.',
+                          'Загрузите конфигурацию из локального .txt или .json файла.',
+                        ),
+                        primaryLabel: tr('Upload file', 'Загрузить файл'),
+                        onPressed: _importProfilesFromFile,
+                      ),
+                      _ProfileActionCard(
+                        icon: Icons.edit_note_rounded,
+                        title: tr('Manual import', 'Ручной импорт'),
+                        description: tr(
+                          'Fill the fields manually and add a VPN profile.',
+                          'Заполните поля вручную и добавьте VPN-профиль.',
+                        ),
+                        primaryLabel: tr('Add manually', 'Добавить вручную'),
+                        onPressed: _showManualProfileImportDialog,
+                      ),
+                    ];
+
+                    if (isWide) {
+                      return Row(
                         children: [
-                          Icon(Icons.arrow_back_rounded,
-                              color: Colors.white, size: 28),
-                          Spacer(),
-                          Text(
-                            tr('Server List', 'Список серверов'),
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 24,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          Spacer(),
-                          SizedBox(width: 28),
+                          Expanded(child: cards[0]),
+                          const SizedBox(width: 16),
+                          Expanded(child: cards[1]),
+                          const SizedBox(width: 16),
+                          Expanded(child: cards[2]),
                         ],
+                      );
+                    }
+
+                    return Column(
+                      children: [
+                        cards[0],
+                        const SizedBox(height: 16),
+                        cards[1],
+                        const SizedBox(height: 16),
+                        cards[2],
+                      ],
+                    );
+                  },
+                ),
+                const SizedBox(height: 22),
+                _ProfilesSectionHeader(
+                  title: tr('Added profiles', 'Добавленные профили'),
+                  trailing: SizedBox(
+                    width: constraints.maxWidth > 920 ? 320 : double.infinity,
+                    child: TextField(
+                      controller: searchController,
+                      onChanged: (_) => setState(() {}),
+                      decoration: InputDecoration(
+                        hintText: tr('Search profiles, SNI or address',
+                            'Поиск профилей, SNI или адреса'),
+                        prefixIcon: const Icon(Icons.search_rounded),
+                        filled: true,
+                        fillColor: Colors.white.withValues(alpha: 0.06),
                       ),
-                      const SizedBox(height: 14),
-                      SegmentedButton<int>(
-                        showSelectedIcon: false,
-                        style: AppUi.segmentedHeaderButton(),
-                        segments: [
-                          ButtonSegment(
-                              value: 0,
-                              label: Text(tr(
-                                  'Standard Servers', 'Стандартные серверы'))),
-                          ButtonSegment(
-                              value: 1,
-                              label: Text(
-                                  tr('Premium Servers', 'Премиум серверы'))),
-                        ],
-                        selected: const {0},
-                        onSelectionChanged: (_) {},
-                      ),
-                    ],
+                    ),
                   ),
                 ),
-                const SizedBox(height: 18),
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  children: [
-                    SizedBox(
-                      width: constraints.maxWidth > 860
-                          ? 320
-                          : constraints.maxWidth,
-                      child: TextField(
-                        controller: searchController,
-                        onChanged: (_) => setState(() {}),
-                        decoration: InputDecoration(
-                          hintText: tr('Search profiles, SNI or address',
-                              'Поиск профилей, SNI или адреса'),
-                          prefixIcon: const Icon(Icons.search_rounded),
-                          filled: true,
-                          fillColor: const Color(0xFFF7F3EC),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(18),
-                            borderSide: BorderSide.none,
-                          ),
+                const SizedBox(height: 12),
+                if (profileRows.isEmpty)
+                  _HintCard(
+                    title: tr('No profiles yet', 'Профилей пока нет'),
+                    description: tr(
+                      'Import a profile from clipboard or add it manually to start.',
+                      'Импортируйте профиль из буфера или добавьте его вручную, чтобы начать.',
+                    ),
+                    icon: Icons.account_tree_outlined,
+                  )
+                else ...[
+                  for (final profile in profileRows) ...[
+                    _ProfileRowCard(
+                      profile: profile,
+                      isActive: profile.id == activeProfileId,
+                      onUse: () => _saveConfig(
+                        _currentConfig().copyWith(
+                          activeProfileId: profile.id,
                         ),
                       ),
+                      onDetails: () => _showEditProfileDialog(profile),
+                      onDelete: () => _removeProfile(profile.id),
                     ),
-                    FilledButton.icon(
-                      onPressed: _importProfileFromClipboard,
-                      icon: const Icon(Icons.content_paste_rounded),
-                      label: Text(tr('Import clipboard', 'Импорт из буфера')),
-                      style: AppUi.primaryButton(AppPalette.blueDark),
-                    ),
-                    OutlinedButton.icon(
-                      onPressed: _showProfileImportDialog,
-                      icon: const Icon(Icons.add_link_rounded),
-                      label: Text(tr('Manual import', 'Ручной импорт')),
-                    ),
+                    const SizedBox(height: 12),
                   ],
-                ),
-                const SizedBox(height: 18),
-                Expanded(
-                  child: filteredProfiles.isEmpty
-                      ? Center(
-                          child: _HintCard(
-                            title: tr('No profiles yet', 'Профилей пока нет'),
-                            description: tr(
-                                'Import a profile from clipboard or add it manually to start.',
-                                'Импортируйте профиль из буфера или добавьте его вручную, чтобы начать.'),
-                            icon: Icons.account_tree_outlined,
-                          ),
-                        )
-                      : ListView.separated(
-                          itemCount: filteredProfiles.length,
-                          separatorBuilder: (context, index) =>
-                              const SizedBox(height: 12),
-                          itemBuilder: (context, index) {
-                            final profile = filteredProfiles[index];
-                            final isActive = profile.id == activeProfileId;
-
-                            return Container(
-                              padding: const EdgeInsets.all(18),
-                              decoration: BoxDecoration(
-                                color: isActive
-                                    ? const Color(0xFF4A6FD8)
-                                    : const Color(0xFF5477DF),
-                                borderRadius: BorderRadius.circular(22),
-                              ),
-                              child: Row(
-                                children: [
-                                  Text(
-                                    _cityFlag(profile),
-                                    style: const TextStyle(fontSize: 34),
-                                  ),
-                                  const SizedBox(width: 14),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Row(
-                                          children: [
-                                            Expanded(
-                                              child: Text(
-                                                profile.name,
-                                                style: TextStyle(
-                                                  fontSize: 16,
-                                                  fontWeight: FontWeight.w700,
-                                                  color: Colors.white
-                                                      .withValues(alpha: 0.96),
-                                                ),
-                                              ),
-                                            ),
-                                            if (isActive)
-                                              Container(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                  horizontal: 10,
-                                                  vertical: 6,
-                                                ),
-                                                decoration: BoxDecoration(
-                                                  color: Colors.white
-                                                      .withValues(alpha: 0.16),
-                                                  borderRadius:
-                                                      BorderRadius.circular(
-                                                    999,
-                                                  ),
-                                                ),
-                                                child: Text(
-                                                  tr('Active', 'Активен'),
-                                                  style: TextStyle(
-                                                      color: Colors.white),
-                                                ),
-                                              ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 8),
-                                        Text(
-                                          '${profile.protocol.toUpperCase()} • ${profile.address.isEmpty ? tr('no endpoint', 'адрес не указан') : '${profile.address}:${profile.port}'}',
-                                          style: TextStyle(
-                                            color: Colors.white.withValues(
-                                              alpha: 0.84,
-                                            ),
-                                          ),
-                                        ),
-                                        if (profile.transport.isNotEmpty ||
-                                            profile.security.isNotEmpty)
-                                          Padding(
-                                            padding: const EdgeInsets.only(
-                                              top: 4,
-                                            ),
-                                            child: Text(
-                                              '${profile.transport.isEmpty ? 'tcp' : profile.transport} • ${profile.security.isEmpty ? tr('none', 'нет') : profile.security}',
-                                              style: TextStyle(
-                                                color: Colors.white.withValues(
-                                                  alpha: 0.52,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        if (profile.sni.isNotEmpty)
-                                          Padding(
-                                            padding: const EdgeInsets.only(
-                                              top: 4,
-                                            ),
-                                            child: Text(
-                                              'SNI ${profile.sni}',
-                                              style: TextStyle(
-                                                color: Colors.white.withValues(
-                                                  alpha: 0.52,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(width: 16),
-                                  _HealthBadge(health: profile.health),
-                                  const SizedBox(width: 12),
-                                  IconButton.outlined(
-                                    onPressed: () => _removeProfile(profile.id),
-                                    icon: const Icon(
-                                        Icons.delete_outline_rounded),
-                                    color: Colors.white,
-                                  ),
-                                  const SizedBox(width: 12),
-                                  FilledButton.tonal(
-                                    onPressed: () => _saveConfig(
-                                      _currentConfig().copyWith(
-                                        activeProfileId: profile.id,
-                                      ),
-                                    ),
-                                    child: Text(isActive
-                                        ? tr('Selected', 'Выбран')
-                                        : tr('Use', 'Использовать')),
-                                    style: FilledButton.styleFrom(
-                                      backgroundColor:
-                                          Colors.white.withValues(alpha: 0.2),
-                                      foregroundColor: Colors.white,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
-                        ),
-                ),
+                ],
               ],
-            ),
-          ),
-        );
-
-        final details = _ProfileDetailsCard(profile: activeProfile);
-
-        if (constraints.maxWidth >= 1160) {
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(flex: 5, child: list),
-              const SizedBox(width: 16),
-              Expanded(flex: 4, child: details),
-            ],
-          );
+            );
+          case ProfilesWorkspaceMode.export:
+            workspaceBody = _ProfilesExportPanel(
+              profiles: profileRows,
+              searchController: searchController,
+              onSearchChanged: (_) => setState(() {}),
+              onCopy: _exportProfile,
+            );
+          case ProfilesWorkspaceMode.edit:
+            workspaceBody = _ProfilesInfoPanel(
+              profile: hasActiveProfile ? activeProfile : null,
+              routingMode: routingMode,
+              rulesProfile: rulesProfile,
+              dnsMode: dnsMode,
+              tunnelMode: tunnelMode,
+              vpnRuleCount: _rulesForBucket(RuleBucket.vpn)
+                  .where((rule) => rule.enabled)
+                  .length,
+              directRuleCount: _rulesForBucket(RuleBucket.direct)
+                  .where((rule) => rule.enabled)
+                  .length,
+              blockedRuleCount: _rulesForBucket(RuleBucket.blocked)
+                  .where((rule) => rule.enabled)
+                  .length,
+            );
         }
 
-        return ListView(
-          children: [
-            SizedBox(height: 680, child: list),
-            const SizedBox(height: 16),
-            details,
-          ],
+        return SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: contentWidth),
+              child: _ProfilesWorkspaceCard(
+                mode: profilesWorkspaceMode,
+                onModeChanged: (mode) {
+                  setState(() {
+                    profilesWorkspaceMode = mode;
+                  });
+                },
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [workspaceBody],
+                ),
+              ),
+            ),
+          ),
         );
       },
     );
@@ -1956,9 +1853,51 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _showProfileImportDialog() async {
+    await _showProfileImportDialogWithMode(_ProfileImportMode.link);
+  }
+
+  Future<void> _showManualProfileImportDialog() async {
+    await _showProfileImportDialogWithMode(_ProfileImportMode.manual);
+  }
+
+  Future<void> _showEditProfileDialog(ServerProfile profile) async {
     final imported = await showDialog<List<ServerProfile>>(
       context: context,
-      builder: (context) => const _ProfileImportDialog(),
+      builder: (context) => _ProfileImportDialog(
+        initialMode: _ProfileImportMode.manual,
+        showModeSwitcher: false,
+        initialProfile: profile,
+      ),
+    );
+    if (imported == null || imported.isEmpty) {
+      return;
+    }
+    final updated = imported.first;
+    final nextProfiles = profiles
+        .map((item) => item.id == profile.id ? updated : item)
+        .toList(growable: false);
+    final nextActiveId =
+        activeProfileId == profile.id ? updated.id : activeProfileId;
+    await _saveConfig(
+      _currentConfig().copyWith(
+        profiles: nextProfiles,
+        activeProfileId: nextActiveId,
+      ),
+    );
+    if (mounted) {
+      _showMessage(
+        tr('Profile updated.', 'Профиль обновлён.'),
+      );
+    }
+  }
+
+  Future<void> _showProfileImportDialogWithMode(_ProfileImportMode mode) async {
+    final imported = await showDialog<List<ServerProfile>>(
+      context: context,
+      builder: (context) => _ProfileImportDialog(
+        initialMode: mode,
+        showModeSwitcher: mode == _ProfileImportMode.link,
+      ),
     );
     if (imported == null || imported.isEmpty) {
       return;
@@ -1978,6 +1917,121 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final nextProfiles =
         profiles.where((profile) => profile.id != profileId).toList();
     await _saveProfiles(nextProfiles);
+  }
+
+  Future<void> _showProfileDetailsDialog(ServerProfile profile) async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) => _DialogShell(
+        maxWidth: 760,
+        child: SingleChildScrollView(
+          child: _ProfileDetailsCard(profile: profile, compact: true),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _exportProfile(ServerProfile profile) async {
+    final payload = profile.rawLink.isNotEmpty
+        ? profile.rawLink
+        : const JsonEncoder.withIndent('  ')
+            .convert(_serverProfileToJson(profile));
+    await Clipboard.setData(ClipboardData(text: payload));
+    if (!mounted) {
+      return;
+    }
+    _showMessage(
+      tr(
+        'Profile data copied to clipboard.',
+        'Данные профиля скопированы в буфер обмена.',
+      ),
+    );
+  }
+
+  Future<void> _importProfilesFromFile() async {
+    try {
+      const typeGroup = XTypeGroup(
+        label: 'VPN configs',
+        extensions: <String>['txt', 'json'],
+      );
+      final file = await openFile(acceptedTypeGroups: const [typeGroup]);
+      if (file == null) {
+        return;
+      }
+
+      final name = file.name.toLowerCase();
+      final content = await file.readAsString();
+      if (content.trim().isEmpty) {
+        _showMessage(
+          tr('Selected file is empty.', 'Выбранный файл пуст.'),
+          isError: true,
+        );
+        return;
+      }
+
+      final imported = _parseProfilesFile(name, content);
+      await _saveProfiles([...imported, ...profiles]);
+      if (!mounted) {
+        return;
+      }
+      _showMessage(
+        imported.length == 1
+            ? tr(
+                'Profile imported from file.',
+                'Профиль импортирован из файла.',
+              )
+            : tr(
+                '${imported.length} profiles imported from file.',
+                'Из файла импортировано профилей: ${imported.length}.',
+              ),
+      );
+    } catch (error) {
+      _showMessage(error.toString(), isError: true);
+    }
+  }
+
+  List<ServerProfile> _parseProfilesFile(String fileName, String content) {
+    final trimmed = content.trim();
+    if (fileName.endsWith('.txt')) {
+      return _parseProfilesInput(trimmed);
+    }
+
+    if (fileName.endsWith('.json')) {
+      final decoded = jsonDecode(trimmed);
+
+      if (decoded is List) {
+        return decoded
+            .whereType<Map<String, dynamic>>()
+            .map(_serverProfileFromJson)
+            .toList();
+      }
+
+      if (decoded is Map<String, dynamic>) {
+        final profilesJson = decoded['profiles'];
+        if (profilesJson is List) {
+          return profilesJson
+              .whereType<Map<String, dynamic>>()
+              .map(_serverProfileFromJson)
+              .toList();
+        }
+
+        if (decoded.containsKey('protocol') ||
+            decoded.containsKey('address') ||
+            decoded.containsKey('userId') ||
+            decoded.containsKey('rawLink')) {
+          return [_serverProfileFromJson(decoded)];
+        }
+      }
+
+      throw Exception(
+        tr(
+          'Unsupported JSON file format.',
+          'Неподдерживаемый формат JSON-файла.',
+        ),
+      );
+    }
+
+    return _parseProfilesInput(trimmed);
   }
 
   Future<void> _pasteRuleList(

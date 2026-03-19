@@ -12,6 +12,8 @@ enum AppPage { home, rules, profiles, settings }
 
 enum TunnelMode { vpn, proxy }
 
+enum ProfilesWorkspaceMode { add, export, edit }
+
 enum RuleType { domain, wildcard, ip, cidr }
 
 enum RuleBucket { vpn, direct, blocked }

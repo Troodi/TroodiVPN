@@ -37,6 +37,7 @@ type DefaultRoute struct {
 	InterfaceAlias string
 	InterfaceIndex int
 	NextHop        string
+	IPAddress      string
 }
 
 type TUNOptions struct {
@@ -296,6 +297,26 @@ func CaptureDefaultRoute() (*DefaultRoute, error) {
 	if result.InterfaceAlias == "" {
 		return nil, fmt.Errorf("failed to parse default route: %s", line)
 	}
+
+	if addrOutput, err := exec.Command("ip", "-4", "-o", "addr", "show", "dev", result.InterfaceAlias).CombinedOutput(); err == nil {
+		addrLine := strings.TrimSpace(string(addrOutput))
+		if idx := strings.IndexByte(addrLine, '\n'); idx >= 0 {
+			addrLine = strings.TrimSpace(addrLine[:idx])
+		}
+		fields := strings.Fields(addrLine)
+		for i := 0; i < len(fields); i++ {
+			if fields[i] == "inet" && i+1 < len(fields) {
+				cidr := fields[i+1]
+				if slash := strings.IndexByte(cidr, '/'); slash >= 0 {
+					result.IPAddress = cidr[:slash]
+				} else {
+					result.IPAddress = cidr
+				}
+				break
+			}
+		}
+	}
+
 	return result, nil
 }
 

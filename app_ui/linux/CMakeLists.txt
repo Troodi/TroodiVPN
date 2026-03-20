@@ -7,7 +7,7 @@ project(runner LANGUAGES CXX)
 set(BINARY_NAME "xray_desktop_ui")
 # The unique GTK application identifier for this application. See:
 # https://wiki.gnome.org/HowDoI/ChooseApplicationID
-set(APPLICATION_ID "com.example.xray_desktop_ui")
+set(APPLICATION_ID "com.troodi.vpn")
 
 # Explicitly opt in to modern CMake behaviors to avoid warnings with recent
 # versions of CMake.
@@ -91,6 +91,7 @@ install(CODE "
 set(INSTALL_BUNDLE_DATA_DIR "${CMAKE_INSTALL_PREFIX}/data")
 set(INSTALL_BUNDLE_LIB_DIR "${CMAKE_INSTALL_PREFIX}/lib")
 set(PROJECT_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../..")
+set(APP_LOGO_PNG "${PROJECT_ROOT_DIR}/app_ui/lib/images/logo.png")
 
 install(TARGETS ${BINARY_NAME} RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}"
   COMPONENT Runtime)
@@ -111,6 +112,12 @@ if(EXISTS "${XRAY_BIN}")
   install(PROGRAMS "${XRAY_BIN}" DESTINATION "${CMAKE_INSTALL_PREFIX}" COMPONENT Runtime)
 else()
   message(WARNING "xray binary not found at xray_runtime/bin/linux/xray. Build xray first.")
+endif()
+
+if(EXISTS "${APP_LOGO_PNG}")
+  install(FILES "${APP_LOGO_PNG}" DESTINATION "${CMAKE_INSTALL_PREFIX}" RENAME "logo.png" COMPONENT Runtime)
+else()
+  message(WARNING "logo.png not found at app_ui/lib/images/logo.png.")
 endif()
 
 install(FILES "${FLUTTER_ICU_DATA_FILE}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"

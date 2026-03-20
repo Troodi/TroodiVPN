@@ -1,5 +1,6 @@
 #include "my_application.h"
 
+#include <glib.h>
 #include <flutter_linux/flutter_linux.h>
 #ifdef GDK_WINDOWING_X11
 #include <gdk/gdkx.h>
@@ -14,6 +15,81 @@ struct _MyApplication {
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
 
+static gchar* get_bundled_logo_path() {
+  g_autofree gchar* exe_path = g_file_read_link("/proc/self/exe", nullptr);
+  if (exe_path == nullptr) {
+    return nullptr;
+  }
+
+  g_autofree gchar* exe_dir = g_path_get_dirname(exe_path);
+  return g_build_filename(exe_dir, "logo.png", nullptr);
+}
+
+static gchar* get_bundled_binary_path() {
+  return g_file_read_link("/proc/self/exe", nullptr);
+}
+
+static void ensure_desktop_entry() {
+  g_autofree gchar* executable_path = get_bundled_binary_path();
+  g_autofree gchar* logo_path = get_bundled_logo_path();
+  if (executable_path == nullptr || logo_path == nullptr) {
+    return;
+  }
+
+  g_autofree gchar* icons_dir = g_build_filename(g_get_user_data_dir(), "icons",
+                                                 "hicolor", "256x256", "apps",
+                                                 nullptr);
+  if (g_mkdir_with_parents(icons_dir, 0755) == 0) {
+    g_autofree gchar* themed_icon_path =
+        g_build_filename(icons_dir, APPLICATION_ID ".png", nullptr);
+    gchar* icon_bytes = nullptr;
+    gsize icon_length = 0;
+    if (g_file_get_contents(logo_path, &icon_bytes, &icon_length, nullptr)) {
+      g_file_set_contents(themed_icon_path, icon_bytes, icon_length, nullptr);
+      g_free(icon_bytes);
+    }
+  }
+
+  g_autofree gchar* applications_dir = g_build_filename(
+      g_get_user_data_dir(), "applications", nullptr);
+  if (g_mkdir_with_parents(applications_dir, 0755) != 0) {
+    return;
+  }
+
+  g_autofree gchar* desktop_path = g_build_filename(
+      applications_dir, APPLICATION_ID ".desktop", nullptr);
+  g_autofree gchar* escaped_exec = g_shell_quote(executable_path);
+  g_autofree gchar* desktop_content = g_strdup_printf(
+      "[Desktop Entry]\n"
+      "Version=1.0\n"
+      "Type=Application\n"
+      "Name=Troodi VPN\n"
+      "Comment=Troodi VPN desktop client\n"
+      "Exec=%s\n"
+      "Icon=%s\n"
+      "Terminal=false\n"
+      "Categories=Network;\n"
+      "StartupNotify=true\n"
+      "StartupWMClass=%s\n"
+      "X-GNOME-WMClass=%s\n",
+      escaped_exec, APPLICATION_ID, APPLICATION_ID, APPLICATION_ID);
+
+  g_file_set_contents(desktop_path, desktop_content, -1, nullptr);
+}
+
+static void apply_default_app_icon() {
+  g_autofree gchar* logo_path = get_bundled_logo_path();
+  if (logo_path == nullptr) {
+    return;
+  }
+
+  g_autoptr(GError) icon_error = nullptr;
+  gtk_window_set_default_icon_from_file(logo_path, &icon_error);
+  if (icon_error != nullptr) {
+    g_warning("Failed to set default app icon: %s", icon_error->message);
+  }
+}
+
 // Called when first Flutter frame received.
 static void first_frame_cb(MyApplication* self, FlView* view) {
   gtk_widget_show(gtk_widget_get_toplevel(GTK_WIDGET(view)));
@@ -22,6 +98,8 @@ static void first_frame_cb(MyApplication* self, FlView* view) {
 // Implements GApplication::activate.
 static void my_application_activate(GApplication* application) {
   MyApplication* self = MY_APPLICATION(application);
+  ensure_desktop_entry();
+  apply_default_app_icon();
   GtkWindow* window =
       GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(application)));
 
@@ -45,11 +123,22 @@ static void my_application_activate(GApplication* application) {
   if (use_header_bar) {
     GtkHeaderBar* header_bar = GTK_HEADER_BAR(gtk_header_bar_new());
     gtk_widget_show(GTK_WIDGET(header_bar));
-    gtk_header_bar_set_title(header_bar, "xray_desktop_ui");
+    gtk_header_bar_set_title(header_bar, "Troodi VPN");
     gtk_header_bar_set_show_close_button(header_bar, TRUE);
     gtk_window_set_titlebar(window, GTK_WIDGET(header_bar));
   } else {
-    gtk_window_set_title(window, "xray_desktop_ui");
+    gtk_window_set_title(window, "Troodi VPN");
+  }
+
+  gtk_window_set_icon_name(window, APPLICATION_ID);
+
+  g_autofree gchar* logo_path = get_bundled_logo_path();
+  if (logo_path != nullptr) {
+    g_autoptr(GError) icon_error = nullptr;
+    gtk_window_set_icon_from_file(window, logo_path, &icon_error);
+    if (icon_error != nullptr) {
+      g_warning("Failed to load app icon: %s", icon_error->message);
+    }
   }
 
   gtk_window_set_default_size(window, 1680, 1040);
@@ -142,6 +231,7 @@ MyApplication* my_application_new() {
   // corresponding .desktop file. This ensures better integration by allowing
   // the application to be recognized beyond its binary name.
   g_set_prgname(APPLICATION_ID);
+  g_set_application_name("Troodi VPN");
 
   return MY_APPLICATION(g_object_new(my_application_get_type(),
                                      "application-id", APPLICATION_ID, "flags",

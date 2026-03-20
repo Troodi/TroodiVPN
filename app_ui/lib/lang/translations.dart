@@ -1,5 +1,7 @@
 const Map<String, String> ruTranslations = {
   'Language': 'Язык',
+  'Choose interface language': 'Выбор языка интерфейса',
+  'Language picker is in the sidebar.': 'Выбор языка находится в боковом меню.',
   'Home': 'Главная',
   'Profiles': 'Профили',
   'Rules': 'Правила',
@@ -44,6 +46,7 @@ const Map<String, String> ruTranslations = {
   'Close': 'Закрыть',
   'Profile info': 'О профиле',
   'Profile / Connection': 'Профиль / Подключение',
+  'Connection': 'Подключение',
   'Add': 'Добавить',
   'Export': 'Экспорт',
   'Added profiles': 'Добавленные профили',
@@ -166,6 +169,11 @@ const Map<String, String> ruTranslations = {
   'Proxy: for selected apps only.':
       'Прокси: только приложения, использующие прокси. Идеально подходит для игр. Браузер будет работать через VPN, игры напрямую.',
   'VPN: protects all applications.': 'VPN: защищает все приложения.',
+  'System proxy': 'Системный прокси',
+  'Enable system proxy for supported apps':
+      'Включить системный прокси для приложений с поддержкой proxy',
+  'Inspect runtime activity and recent errors':
+      'Просмотр активности runtime и последних ошибок',
   'rules': 'правил',
   'Use VPN for these domains': 'Использовать VPN для этих доменов',
   'Bypass VPN for these domains': 'Открывать напрямую для этих доменов',
@@ -245,6 +253,8 @@ const Map<String, String> ruTranslations = {
 
 const Map<String, String> zhTranslations = {
   'Language': '语言',
+  'Choose interface language': '选择界面语言',
+  'Language picker is in the sidebar.': '语言选择器位于侧边栏。',
   'Home': '主页',
   'Profiles': '配置',
   'Rules': '规则',
@@ -272,6 +282,7 @@ const Map<String, String> zhTranslations = {
   'Close': '关闭',
   'Profile info': '配置详情',
   'Profile / Connection': '配置 / 连接',
+  'Connection': '连接',
   'Add': '添加',
   'Export': '导出',
   'Added profiles': '已添加配置',
@@ -469,6 +480,9 @@ const Map<String, String> zhTranslations = {
   'No blocked rules yet.': '尚无拦截规则。',
   'Proxy: for selected apps only.': '代理：仅影响使用代理的应用。非常适合游戏。浏览器会通过 VPN，游戏将直连。',
   'VPN: protects all applications.': 'VPN：保护所有应用程序。',
+  'System proxy': '系统代理',
+  'Enable system proxy for supported apps': '为支持代理的应用启用系统代理',
+  'Inspect runtime activity and recent errors': '查看运行时活动和最近错误',
   'Edit rule in': '编辑规则于',
   'Administrator access required': '需要管理员权限',
   'VPN (TUN) on Linux needs sudo to start Xray and configure routes. The password is kept only in memory until the app is restarted.':

@@ -69,7 +69,7 @@ class _Sidebar extends StatelessWidget {
               ClipRRect(
                 borderRadius: BorderRadius.circular(16),
                 child: Image.asset(
-                  'windows/runner/resources/troodi_icon_preview.png',
+                  'lib/images/logo.png',
                   width: 42,
                   height: 42,
                   fit: BoxFit.cover,
@@ -319,35 +319,22 @@ class _TroodiLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF0E5E6F), Color(0xFF173C4A)],
-        ),
+    return ClipRRect(
         borderRadius: BorderRadius.circular(size * 0.34),
-      ),
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Icon(Icons.shield_outlined, color: Colors.white, size: size * 0.5),
-          Positioned(
-            bottom: size * 0.16,
-            child: Container(
-              width: size * 0.28,
-              height: size * 0.06,
-              decoration: BoxDecoration(
-                color: const Color(0xFFE8D39D),
-                borderRadius: BorderRadius.circular(999),
-              ),
-            ),
+        child: Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(size * 0.34),
+            boxShadow: [AppShadows.darkCard],
           ),
-        ],
-      ),
-    );
+          child: Image.asset(
+            'lib/images/logo.png',
+            width: size,
+            height: size,
+            fit: BoxFit.cover,
+          ),
+        ));
   }
 }
 
@@ -5183,6 +5170,259 @@ class _ChipLabel extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(label),
+    );
+  }
+}
+
+class _SettingsWorkspaceCard extends StatelessWidget {
+  const _SettingsWorkspaceCard({
+    required this.child,
+  });
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.white.withValues(alpha: 0.08),
+            Colors.white.withValues(alpha: 0.04),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(32),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+        boxShadow: [AppShadows.darkCard],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 22, 24, 24),
+        child: child,
+      ),
+    );
+  }
+}
+
+class _SettingsSectionCard extends StatelessWidget {
+  const _SettingsSectionCard({
+    required this.icon,
+    required this.title,
+    required this.children,
+  });
+
+  final IconData icon;
+  final String title;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return _RulesGlassCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                icon,
+                size: 28,
+                color: AppPalette.homeText.withValues(alpha: 0.88),
+              ),
+              const SizedBox(width: 14),
+              Text(
+                title,
+                style: TextStyle(
+                  color: AppPalette.homeText.withValues(alpha: 0.96),
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          ...children,
+        ],
+      ),
+    );
+  }
+}
+
+class _SettingsDividerLine extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Divider(
+        height: 1,
+        color: Colors.white.withValues(alpha: 0.08),
+      ),
+    );
+  }
+}
+
+class _SettingsActionRow extends StatelessWidget {
+  const _SettingsActionRow({
+    required this.icon,
+    required this.title,
+    required this.onTap,
+    this.subtitle,
+  });
+
+  final IconData icon;
+  final String title;
+  final String? subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(24),
+        child: _RulesGlassCard(
+          child: Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white.withValues(alpha: 0.08),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.08),
+                  ),
+                ),
+                child: Icon(
+                  icon,
+                  color: AppPalette.homeText.withValues(alpha: 0.9),
+                  size: 25,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        color: AppPalette.homeText.withValues(alpha: 0.96),
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    if (subtitle != null) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        subtitle!,
+                        style: TextStyle(
+                          color: AppPalette.homeTextMuted.withValues(
+                            alpha: 0.9,
+                          ),
+                          fontSize: 15,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.chevron_right_rounded,
+                color: AppPalette.homeTextMuted.withValues(alpha: 0.9),
+                size: 28,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SettingsToggleRow extends StatelessWidget {
+  const _SettingsToggleRow({
+    required this.icon,
+    required this.title,
+    required this.value,
+    required this.onChanged,
+    this.subtitle,
+  });
+
+  final IconData icon;
+  final String title;
+  final String? subtitle;
+  final bool value;
+  final ValueChanged<bool>? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onChanged != null;
+    return MouseRegion(
+      cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+      child: InkWell(
+        onTap: enabled ? () => onChanged!(!value) : null,
+        borderRadius: BorderRadius.circular(22),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 42,
+                child: Icon(
+                  icon,
+                  color: AppPalette.homeText.withValues(
+                    alpha: enabled ? 0.88 : 0.45,
+                  ),
+                  size: 28,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        color: AppPalette.homeText.withValues(
+                          alpha: enabled ? 0.96 : 0.60,
+                        ),
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    if (subtitle != null) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        subtitle!,
+                        style: TextStyle(
+                          color: AppPalette.homeTextMuted.withValues(
+                            alpha: enabled ? 0.9 : 0.5,
+                          ),
+                          fontSize: 15,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              Switch(
+                value: value,
+                onChanged: onChanged,
+                activeThumbColor: Colors.white,
+                inactiveThumbColor: const Color(0xFFD7DCEF),
+                activeTrackColor: AppPalette.homeAccentStrong,
+                inactiveTrackColor: Colors.white.withValues(alpha: 0.16),
+                trackOutlineColor: WidgetStatePropertyAll(
+                  Colors.white.withValues(alpha: 0.05),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

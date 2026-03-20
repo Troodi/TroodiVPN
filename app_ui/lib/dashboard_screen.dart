@@ -20,6 +20,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool systemProxyEnabled = true;
   bool tunEnabled = false;
   bool launchAtStartup = true;
+  bool autoCheckUpdates = false;
   AppLanguage appLanguage = AppLanguage.ru;
   ProfilesWorkspaceMode profilesWorkspaceMode = ProfilesWorkspaceMode.add;
   AppPage selectedPage = AppPage.home;
@@ -1515,10 +1516,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         icon: Icons.content_paste_rounded,
                         title: tr('Import from clipboard'),
                         description: tr(
-                            'Paste one or several VPN links and add profiles instantly.'),
+                          'Paste one or several VPN links and add profiles instantly.',
+                        ),
                         primaryLabel: tr('Paste link'),
                         onPressed: _importProfileFromClipboard,
-                      ),
+                      ).animate().fadeIn(duration: 240.ms).slideY(
+                            begin: 0.04,
+                            end: 0,
+                            duration: 280.ms,
+                            curve: Curves.easeOutCubic,
+                          ),
                       _ProfileActionCard(
                         icon: Icons.upload_file_rounded,
                         title: tr('Import file'),
@@ -1527,15 +1534,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                         primaryLabel: tr('Upload file'),
                         onPressed: _importProfilesFromFile,
-                      ),
+                      ).animate().fadeIn(delay: 70.ms, duration: 240.ms).slideY(
+                            begin: 0.04,
+                            end: 0,
+                            delay: 70.ms,
+                            duration: 280.ms,
+                            curve: Curves.easeOutCubic,
+                          ),
                       _ProfileActionCard(
                         icon: Icons.edit_note_rounded,
                         title: tr('Manual import'),
                         description: tr(
-                            'Fill the fields manually and add a VPN profile.'),
+                          'Fill the fields manually and add a VPN profile.',
+                        ),
                         primaryLabel: tr('Add manually'),
                         onPressed: _showManualProfileImportDialog,
-                      ),
+                      )
+                          .animate()
+                          .fadeIn(delay: 140.ms, duration: 240.ms)
+                          .slideY(
+                            begin: 0.04,
+                            end: 0,
+                            delay: 140.ms,
+                            duration: 280.ms,
+                            curve: Curves.easeOutCubic,
+                          ),
                     ];
 
                     if (isWide) {
@@ -1577,7 +1600,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                     ),
                   ),
-                ),
+                ).animate().fadeIn(delay: 190.ms, duration: 220.ms),
                 const SizedBox(height: 12),
                 if (profileRows.isEmpty)
                   _HintCard(
@@ -1586,20 +1609,39 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       'Import a profile from clipboard or add it manually to start.',
                     ),
                     icon: Icons.account_tree_outlined,
-                  )
+                  ).animate().fadeIn(delay: 230.ms, duration: 220.ms).slideY(
+                        begin: 0.03,
+                        end: 0,
+                        delay: 230.ms,
+                        duration: 260.ms,
+                        curve: Curves.easeOutCubic,
+                      )
                 else ...[
-                  for (final profile in profileRows) ...[
+                  for (var index = 0; index < profileRows.length; index++) ...[
                     _ProfileRowCard(
-                      profile: profile,
-                      isActive: profile.id == activeProfileId,
+                      profile: profileRows[index],
+                      isActive: profileRows[index].id == activeProfileId,
                       onUse: () => _saveConfig(
                         _currentConfig().copyWith(
-                          activeProfileId: profile.id,
+                          activeProfileId: profileRows[index].id,
                         ),
                       ),
-                      onDetails: () => _showEditProfileDialog(profile),
-                      onDelete: () => _removeProfile(profile.id),
-                    ),
+                      onDetails: () =>
+                          _showEditProfileDialog(profileRows[index]),
+                      onDelete: () => _removeProfile(profileRows[index].id),
+                    )
+                        .animate()
+                        .fadeIn(
+                          delay: Duration(milliseconds: 230 + (index * 55)),
+                          duration: 220.ms,
+                        )
+                        .slideY(
+                          begin: 0.03,
+                          end: 0,
+                          delay: Duration(milliseconds: 230 + (index * 55)),
+                          duration: 260.ms,
+                          curve: Curves.easeOutCubic,
+                        ),
                     const SizedBox(height: 12),
                   ],
                 ],
@@ -1645,9 +1687,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 },
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [workspaceBody],
+                  children: [
+                    workspaceBody
+                        .animate(key: ValueKey(profilesWorkspaceMode))
+                        .fadeIn(duration: 260.ms)
+                        .slideY(
+                          begin: 0.035,
+                          end: 0,
+                          duration: 300.ms,
+                          curve: Curves.easeOutCubic,
+                        ),
+                  ],
                 ),
-              ),
+              ).animate().fadeIn(duration: 220.ms).slideY(
+                    begin: 0.02,
+                    end: 0,
+                    duration: 260.ms,
+                    curve: Curves.easeOutCubic,
+                  ),
             ),
           ),
         );
@@ -1656,103 +1713,101 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildSettingsView() {
-    return Column(
-      children: [
-        const SizedBox(height: 8),
-        _MobileTopBar(
-          title: loc(appLanguage, 'Settings'),
-          trailing: Icons.menu,
-          titleAlign: Alignment.centerLeft,
-        ),
-        const SizedBox(height: 8),
-        const Divider(height: 1, color: AppPalette.border),
-        Expanded(
-          child: ListView(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            children: [
-              _SectionLabel(loc(appLanguage, 'Settings')),
-              _SettingsSimpleTile(
-                icon: Icons.palette_outlined,
-                title: loc(appLanguage, 'Theme Mode'),
-                onTap: () => _showMessage(
-                  loc(appLanguage, 'Theme switch will be added next.'),
-                ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final contentWidth = constraints.maxWidth >= 1180
+            ? constraints.maxWidth
+            : constraints.maxWidth;
+
+        return SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: contentWidth),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _SettingsSectionCard(
+                    icon: Icons.shield_outlined,
+                    title: loc(appLanguage, 'Connection'),
+                    children: [
+                      _SettingsToggleRow(
+                        icon: Icons.shield_outlined,
+                        title: loc(appLanguage, 'VPN (TUN) Mode'),
+                        subtitle: loc(
+                          appLanguage,
+                          'Protect all applications',
+                        ),
+                        value: tunEnabled,
+                        onChanged: (value) async {
+                          if (value) {
+                            await _switchTunnelMode(TunnelMode.vpn);
+                          } else {
+                            await _switchTunnelMode(TunnelMode.proxy);
+                          }
+                        },
+                      ),
+                      _SettingsDividerLine(),
+                      _SettingsToggleRow(
+                        icon: Icons.public_rounded,
+                        title: loc(appLanguage, 'Proxy'),
+                        subtitle: loc(
+                          appLanguage,
+                          'Proxy: for selected apps only.',
+                        ),
+                        value: systemProxyEnabled,
+                        onChanged: (value) async {
+                          if (value) {
+                            await _switchTunnelMode(TunnelMode.proxy);
+                          } else {
+                            await _switchTunnelMode(TunnelMode.vpn);
+                          }
+                        },
+                      ),
+                      _SettingsDividerLine(),
+                      _SettingsActionRow(
+                        icon: Icons.article_outlined,
+                        title: loc(appLanguage, 'Open Logs'),
+                        subtitle: loc(
+                          appLanguage,
+                          'Inspect runtime activity and recent errors',
+                        ),
+                        onTap: _showLogsDialog,
+                      ),
+                    ],
+                  ).animate().fadeIn(duration: 240.ms).slideY(
+                        begin: 0.04,
+                        end: 0,
+                        duration: 280.ms,
+                        curve: Curves.easeOutCubic,
+                      ),
+                  const SizedBox(height: 16),
+                  _SettingsSectionCard(
+                    icon: Icons.info_outline_rounded,
+                    title: loc(appLanguage, 'About Us'),
+                    children: [
+                      _SettingsActionRow(
+                        icon: Icons.info_outline_rounded,
+                        title: loc(appLanguage, 'About'),
+                        subtitle: 'Troodi VPN • Flutter + Go + Xray',
+                        onTap: () => _showMessage(
+                          'Troodi VPN • Flutter + Go + Xray',
+                        ),
+                      ),
+                    ],
+                  ).animate().fadeIn(delay: 90.ms, duration: 240.ms).slideY(
+                        begin: 0.04,
+                        end: 0,
+                        delay: 90.ms,
+                        duration: 280.ms,
+                        curve: Curves.easeOutCubic,
+                      ),
+                ],
               ),
-              _SettingsSimpleTile(
-                icon: Icons.language,
-                title: loc(appLanguage, 'Language'),
-                onTap: () => _showMessage(
-                  loc(appLanguage, 'Language picker is in the sidebar.'),
-                ),
-              ),
-              _SettingsSimpleTile(
-                icon: Icons.refresh,
-                title: loc(appLanguage, 'Check for Updates'),
-                onTap: () => _showMessage(
-                  loc(appLanguage, 'No updates available right now.'),
-                ),
-              ),
-              const SizedBox(height: 14),
-              _SectionLabel(loc(appLanguage, 'Connection')),
-              _SettingsSwitchTile(
-                icon: Icons.shield_rounded,
-                title: loc(appLanguage, 'VPN (TUN) Mode'),
-                subtitle: loc(appLanguage, 'Protect all applications'),
-                value: tunEnabled,
-                onChanged: (value) async {
-                  if (value) {
-                    final elevated = await _ensureAdminForTun();
-                    if (!elevated) {
-                      return;
-                    }
-                  }
-                  await _saveConfig(
-                    _currentConfig().copyWith(
-                      tunEnabled: value,
-                      systemProxyEnabled: !value,
-                    ),
-                  );
-                },
-              ),
-              _SettingsSwitchTile(
-                icon: Icons.launch_rounded,
-                title: loc(appLanguage, 'Launch at startup'),
-                subtitle: loc(appLanguage, 'Start with last selected profile'),
-                value: launchAtStartup,
-                onChanged: (value) => _saveConfig(
-                  _currentConfig().copyWith(launchAtStartup: value),
-                ),
-              ),
-              _SettingsSimpleTile(
-                icon: Icons.terminal_rounded,
-                title: loc(appLanguage, 'Open Logs'),
-                onTap: _showLogsDialog,
-              ),
-              const SizedBox(height: 14),
-              _SectionLabel(loc(appLanguage, 'About Us')),
-              _SettingsSimpleTile(
-                icon: Icons.privacy_tip_outlined,
-                title: loc(appLanguage, 'Privacy Policy'),
-                onTap: () => _showMessage(
-                  loc(appLanguage, 'Privacy Policy page is not connected yet.'),
-                ),
-              ),
-              _SettingsSimpleTile(
-                icon: Icons.description_outlined,
-                title: loc(appLanguage, 'Terms of Service'),
-                onTap: () => _showMessage(
-                  loc(appLanguage, 'Terms page is not connected yet.'),
-                ),
-              ),
-              _SettingsSimpleTile(
-                icon: Icons.info_outline,
-                title: loc(appLanguage, 'About'),
-                onTap: () => _showMessage('Troodi VPN • Flutter + Go + Xray'),
-              ),
-            ],
+            ),
           ),
-        ),
-      ],
+        );
+      },
     );
   }
 

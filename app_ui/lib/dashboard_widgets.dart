@@ -1418,7 +1418,7 @@ class _ProfilesInfoPanel extends StatelessWidget {
                           label: tr('Profile'),
                           value: rulesProfile == RulesProfile.russia
                               ? 'Russia'
-                              : 'Global',
+                              : tr('Global'),
                         ),
                         _InfoStatChip(
                           label: 'DNS',
@@ -2231,15 +2231,18 @@ class _RoutingModeCard extends StatelessWidget {
             const SizedBox(height: 12),
             SegmentedButton<RoutingMode>(
               showSelectedIcon: false,
-              segments: const [
-                ButtonSegment(value: RoutingMode.global, label: Text('Global')),
+              segments: [
+                ButtonSegment(
+                  value: RoutingMode.global,
+                  label: Text(tr('Global')),
+                ),
                 ButtonSegment(
                   value: RoutingMode.whitelist,
-                  label: Text('Whitelist'),
+                  label: Text(tr('Whitelist')),
                 ),
                 ButtonSegment(
                   value: RoutingMode.blacklist,
-                  label: Text('Blacklist'),
+                  label: Text(tr('Blacklist')),
                 ),
               ],
               selected: <RoutingMode>{routingMode},
@@ -2358,7 +2361,7 @@ class _RulesModeCard extends StatelessWidget {
             runSpacing: 10,
             children: [
               _ProfileChoiceChip(
-                label: 'Global',
+                label: tr('Global'),
                 selected: rulesProfile == RulesProfile.global,
                 onTap: () => onProfileChanged(RulesProfile.global),
               ),
@@ -3632,7 +3635,7 @@ class _DomainTestCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Test domain / IP',
+            tr('Test domain / IP'),
             style: TextStyle(
               color: AppPalette.homeText.withValues(alpha: 0.96),
               fontSize: 20,
@@ -3651,7 +3654,7 @@ class _DomainTestCard extends StatelessWidget {
                     fontSize: 14,
                   ),
                   decoration: InputDecoration(
-                    hintText: 'Enter domain or IP',
+                    hintText: tr('Enter domain or IP'),
                     hintStyle: TextStyle(
                       color: AppPalette.homeTextMuted.withValues(alpha: 0.90),
                     ),
@@ -3980,7 +3983,7 @@ class _RuleInputRow extends StatelessWidget {
             FilledButton.icon(
               onPressed: onAdd,
               icon: const Icon(Icons.add_rounded, size: 16),
-              label: const Text('Add'),
+              label: Text(tr('Add')),
               style: AppUi.primaryButton(accent),
             ),
           ],
@@ -4150,7 +4153,7 @@ class _EditRuleDialogState extends State<_EditRuleDialog> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            tr('Edit rule in ${widget.title}'),
+            '${tr('Edit rule in')} ${widget.title}',
             style: TextStyle(
               color: AppPalette.homeText.withValues(alpha: 0.96),
               fontSize: 20,
@@ -4159,7 +4162,7 @@ class _EditRuleDialogState extends State<_EditRuleDialog> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Update the value and save the rule.',
+            tr('Update the value and save the rule.'),
             style: TextStyle(
               color: AppPalette.homeTextMuted.withValues(alpha: 0.82),
               height: 1.4,
@@ -4357,7 +4360,7 @@ class _PasteListDialogState extends State<_PasteListDialog> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            tr('Paste list to ${widget.title}'),
+            '${tr('Paste list to')} ${widget.title}',
             style: TextStyle(
               color: AppPalette.homeText.withValues(alpha: 0.96),
               fontSize: 20,
@@ -4366,7 +4369,7 @@ class _PasteListDialogState extends State<_PasteListDialog> {
           ),
           const SizedBox(height: 10),
           Text(
-            'One rule per line. Empty lines are ignored.',
+            tr('One rule per line. Empty lines are ignored.'),
             style: TextStyle(
               color: AppPalette.homeTextMuted.withValues(alpha: 0.82),
             ),
@@ -4414,9 +4417,9 @@ class _PasteListDialogState extends State<_PasteListDialog> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'These lines could not be added',
-                    style: TextStyle(
+                  Text(
+                    tr('These lines could not be added'),
+                    style: const TextStyle(
                       color: Color(0xFFFFB6A7),
                       fontWeight: FontWeight.w700,
                     ),
@@ -4441,12 +4444,12 @@ class _PasteListDialogState extends State<_PasteListDialog> {
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
               _DialogSecondaryButton(
-                label: 'Cancel',
+                label: tr('Cancel'),
                 onPressed: () => Navigator.of(context).pop(),
               ),
               const SizedBox(width: 10),
               _DialogPrimaryButton(
-                label: 'Apply',
+                label: tr('Apply'),
                 onPressed: _submit,
               ),
             ],
@@ -4675,22 +4678,22 @@ class _ResultRow extends StatelessWidget {
 String _modeLabel(RoutingMode mode) {
   switch (mode) {
     case RoutingMode.global:
-      return 'Protect all traffic';
+      return tr('Protect all traffic');
     case RoutingMode.whitelist:
-      return 'Only selected sites';
+      return tr('Only selected sites');
     case RoutingMode.blacklist:
-      return 'Exclude sites';
+      return tr('Exclude sites');
   }
 }
 
 String _behaviorHeadline(RoutingMode mode) {
   switch (mode) {
     case RoutingMode.global:
-      return 'All traffic goes through VPN';
+      return tr('All traffic goes through VPN');
     case RoutingMode.whitelist:
-      return 'Only selected sites use VPN';
+      return tr('Only selected sites use VPN');
     case RoutingMode.blacklist:
-      return 'All traffic goes through VPN except selected sites';
+      return tr('All traffic goes through VPN except selected sites');
   }
 }
 
@@ -4704,33 +4707,33 @@ List<Widget> _behaviorStats({
     case RoutingMode.global:
       return [
         _InlineInfoChip(
-          label: '$directCount sites open normally',
+          label: '$directCount ${tr('sites open normally')}',
           accent: const Color(0xFF97A8FF),
         ),
         _InlineInfoChip(
-          label: '$blockedCount blocked',
+          label: '$blockedCount ${tr('blocked')}',
           accent: const Color(0xFFFF9E8B),
         ),
       ];
     case RoutingMode.whitelist:
       return [
         _InlineInfoChip(
-          label: '$vpnCount sites via VPN',
+          label: '$vpnCount ${tr('sites via VPN')}',
           accent: const Color(0xFF6BD7AE),
         ),
         _InlineInfoChip(
-          label: '$blockedCount blocked',
+          label: '$blockedCount ${tr('blocked')}',
           accent: const Color(0xFFFF9E8B),
         ),
       ];
     case RoutingMode.blacklist:
       return [
         _InlineInfoChip(
-          label: '$directCount sites open normally',
+          label: '$directCount ${tr('sites open normally')}',
           accent: const Color(0xFF97A8FF),
         ),
         _InlineInfoChip(
-          label: '$blockedCount blocked',
+          label: '$blockedCount ${tr('blocked')}',
           accent: const Color(0xFFFF9E8B),
         ),
       ];
@@ -6280,138 +6283,123 @@ class _LanguagePicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          tr('Language'),
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-            color: AppPalette.homeText.withValues(alpha: 0.86),
-          ),
-        ),
-        const SizedBox(height: 10),
-        LayoutBuilder(
-          builder: (context, constraints) {
-            return MouseRegion(
-              cursor: SystemMouseCursors.click,
-              child: PopupMenuButton<AppLanguage>(
-                tooltip: '',
-                position: PopupMenuPosition.under,
-                offset: const Offset(0, 8),
-                elevation: 18,
-                padding: EdgeInsets.zero,
-                color: const Color(0xFF222846),
-                constraints: BoxConstraints.tightFor(
-                  width: constraints.maxWidth,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(18),
-                  side: BorderSide(
-                    color: Colors.white.withValues(alpha: 0.08),
-                  ),
-                ),
-                onSelected: onChanged,
-                itemBuilder: (context) => AppLanguage.values
-                    .map(
-                      (language) => PopupMenuItem<AppLanguage>(
-                        value: language,
-                        padding: EdgeInsets.zero,
-                        child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 8,
-                          ),
-                          child: Row(
-                            children: [
-                              _LanguageFlagIcon(language: language),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  language.label,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    color: AppPalette.homeText
-                                        .withValues(alpha: 0.96),
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              SizedBox(
-                                width: 26,
-                                child: Text(
-                                  language.shortLabel,
-                                  textAlign: TextAlign.right,
-                                  style: TextStyle(
-                                    color: AppPalette.homeTextMuted
-                                        .withValues(alpha: 0.78),
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: PopupMenuButton<AppLanguage>(
+            tooltip: '',
+            position: PopupMenuPosition.under,
+            offset: const Offset(0, 8),
+            elevation: 18,
+            padding: EdgeInsets.zero,
+            color: const Color(0xFF222846),
+            constraints: BoxConstraints.tightFor(
+              width: constraints.maxWidth,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
+              side: BorderSide(
+                color: Colors.white.withValues(alpha: 0.08),
+              ),
+            ),
+            onSelected: onChanged,
+            itemBuilder: (context) => AppLanguage.values
+                .map(
+                  (language) => PopupMenuItem<AppLanguage>(
+                    value: language,
+                    padding: EdgeInsets.zero,
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
                       ),
-                    )
-                    .toList(growable: false),
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 13,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.06),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.08),
+                      child: Row(
+                        children: [
+                          _LanguageFlagIcon(language: language),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              language.label,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color:
+                                    AppPalette.homeText.withValues(alpha: 0.96),
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          SizedBox(
+                            width: 26,
+                            child: Text(
+                              language.shortLabel,
+                              textAlign: TextAlign.right,
+                              style: TextStyle(
+                                color: AppPalette.homeTextMuted
+                                    .withValues(alpha: 0.78),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                  child: Row(
-                    children: [
-                      _LanguageFlagIcon(language: value),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          value.label,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: AppPalette.homeText.withValues(alpha: 0.96),
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Text(
-                        value.shortLabel,
-                        style: TextStyle(
-                          color:
-                              AppPalette.homeTextMuted.withValues(alpha: 0.78),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Icon(
-                        Icons.keyboard_arrow_down_rounded,
-                        size: 20,
-                        color: AppPalette.homeTextMuted.withValues(alpha: 0.88),
-                      ),
-                    ],
-                  ),
+                )
+                .toList(growable: false),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 13,
+              ),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.08),
                 ),
               ),
-            );
-          },
-        ),
-      ],
+              child: Row(
+                children: [
+                  _LanguageFlagIcon(language: value),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      value.label,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: AppPalette.homeText.withValues(alpha: 0.96),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    value.shortLabel,
+                    style: TextStyle(
+                      color: AppPalette.homeTextMuted.withValues(alpha: 0.78),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Icon(
+                    Icons.keyboard_arrow_down_rounded,
+                    size: 20,
+                    color: AppPalette.homeTextMuted.withValues(alpha: 0.88),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

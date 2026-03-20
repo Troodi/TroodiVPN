@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Troodi VPN
+Comment=Troodi VPN desktop client
+Exec=troodi-vpn
+Icon=troodi-vpn
+Terminal=false
+Categories=Network;
+StartupNotify=true
+StartupWMClass=com.troodi.vpn
+X-GNOME-WMClass=com.troodi.vpn

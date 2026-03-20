@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:http/http.dart' as http;
+import 'package:http/io_client.dart';
 import 'lang/translations.dart';
 
 part 'app_theme.dart';

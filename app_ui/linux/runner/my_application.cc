@@ -1,6 +1,7 @@
 #include "my_application.h"
 
 #include <glib.h>
+#include <glib/gstdio.h>
 #include <flutter_linux/flutter_linux.h>
 #ifdef GDK_WINDOWING_X11
 #include <gdk/gdkx.h>
@@ -36,6 +37,16 @@ static void ensure_desktop_entry() {
     return;
   }
 
+  const gchar* system_desktop_path = "/usr/share/applications/troodi-vpn.desktop";
+  g_autofree gchar* local_desktop_path = g_build_filename(
+      g_get_user_data_dir(), "applications", APPLICATION_ID ".desktop", nullptr);
+  if (g_file_test(system_desktop_path, G_FILE_TEST_EXISTS)) {
+    if (g_file_test(local_desktop_path, G_FILE_TEST_EXISTS)) {
+      g_unlink(local_desktop_path);
+    }
+    return;
+  }
+
   g_autofree gchar* icons_dir = g_build_filename(g_get_user_data_dir(), "icons",
                                                  "hicolor", "256x256", "apps",
                                                  nullptr);
@@ -56,8 +67,7 @@ static void ensure_desktop_entry() {
     return;
   }
 
-  g_autofree gchar* desktop_path = g_build_filename(
-      applications_dir, APPLICATION_ID ".desktop", nullptr);
+  g_autofree gchar* desktop_path = g_steal_pointer(&local_desktop_path);
   g_autofree gchar* escaped_exec = g_shell_quote(executable_path);
   g_autofree gchar* desktop_content = g_strdup_printf(
       "[Desktop Entry]\n"

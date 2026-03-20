@@ -28,6 +28,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool isBusy = false;
   bool isConnecting = false;
   bool isElevationInProgress = false;
+  bool isSwitchingTunnelMode = false;
   String? errorMessage;
   RuntimeSnapshot runtimeStatus = RuntimeSnapshot.empty;
 
@@ -552,30 +553,42 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _switchTunnelMode(TunnelMode mode) async {
-    if (mode == tunnelMode) {
+    if (mode == tunnelMode || isSwitchingTunnelMode || isBusy) {
       return;
     }
 
-    if (mode == TunnelMode.vpn) {
-      final elevated = await _ensureAdminForTun();
-      if (!elevated) {
+    setState(() {
+      isSwitchingTunnelMode = true;
+    });
+
+    try {
+      if (mode == TunnelMode.vpn) {
+        final elevated = await _ensureAdminForTun();
+        if (!elevated) {
+          return;
+        }
+        await _saveConfig(
+          _currentConfig().copyWith(
+            tunEnabled: true,
+            systemProxyEnabled: false,
+          ),
+        );
         return;
       }
+
       await _saveConfig(
         _currentConfig().copyWith(
-          tunEnabled: true,
-          systemProxyEnabled: false,
+          tunEnabled: false,
+          systemProxyEnabled: true,
         ),
       );
-      return;
+    } finally {
+      if (mounted) {
+        setState(() {
+          isSwitchingTunnelMode = false;
+        });
+      }
     }
-
-    await _saveConfig(
-      _currentConfig().copyWith(
-        tunEnabled: false,
-        systemProxyEnabled: true,
-      ),
-    );
   }
 
   Future<bool> _ensureAdminForTun() async {

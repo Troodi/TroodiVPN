@@ -439,10 +439,6 @@ func (m *Manager) ensureRoutingAssetsInternal(enabled bool, force bool) (string,
 		m.appendLog(fmt.Sprintf("[%s] updated routing asset %s", time.Now().Format(time.RFC3339), asset.name))
 	}
 
-	if err := copyRoutingAssetsToBinaryDir(assetDir, filepath.Dir(m.binaryPath), required); err != nil {
-		return "", err
-	}
-
 	return assetDir, nil
 }
 

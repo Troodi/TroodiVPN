@@ -5361,66 +5361,62 @@ class _SettingsToggleRow extends StatelessWidget {
     final enabled = onChanged != null;
     return MouseRegion(
       cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
-      child: InkWell(
-        onTap: enabled ? () => onChanged!(!value) : null,
-        borderRadius: BorderRadius.circular(22),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
-          child: Row(
-            children: [
-              SizedBox(
-                width: 42,
-                child: Icon(
-                  icon,
-                  color: AppPalette.homeText.withValues(
-                    alpha: enabled ? 0.88 : 0.45,
-                  ),
-                  size: 28,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 42,
+              child: Icon(
+                icon,
+                color: AppPalette.homeText.withValues(
+                  alpha: enabled ? 0.88 : 0.45,
                 ),
+                size: 28,
               ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      color: AppPalette.homeText.withValues(
+                        alpha: enabled ? 0.96 : 0.60,
+                      ),
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  if (subtitle != null) ...[
+                    const SizedBox(height: 6),
                     Text(
-                      title,
+                      subtitle!,
                       style: TextStyle(
-                        color: AppPalette.homeText.withValues(
-                          alpha: enabled ? 0.96 : 0.60,
+                        color: AppPalette.homeTextMuted.withValues(
+                          alpha: enabled ? 0.9 : 0.5,
                         ),
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
                       ),
                     ),
-                    if (subtitle != null) ...[
-                      const SizedBox(height: 6),
-                      Text(
-                        subtitle!,
-                        style: TextStyle(
-                          color: AppPalette.homeTextMuted.withValues(
-                            alpha: enabled ? 0.9 : 0.5,
-                          ),
-                          fontSize: 15,
-                        ),
-                      ),
-                    ],
                   ],
-                ),
+                ],
               ),
-              Switch(
-                value: value,
-                onChanged: onChanged,
-                activeThumbColor: Colors.white,
-                inactiveThumbColor: const Color(0xFFD7DCEF),
-                activeTrackColor: AppPalette.homeAccentStrong,
-                inactiveTrackColor: Colors.white.withValues(alpha: 0.16),
-                trackOutlineColor: WidgetStatePropertyAll(
-                  Colors.white.withValues(alpha: 0.05),
-                ),
+            ),
+            Switch(
+              value: value,
+              onChanged: onChanged,
+              activeThumbColor: Colors.white,
+              inactiveThumbColor: const Color(0xFFD7DCEF),
+              activeTrackColor: AppPalette.homeAccentStrong,
+              inactiveTrackColor: Colors.white.withValues(alpha: 0.16),
+              trackOutlineColor: WidgetStatePropertyAll(
+                Colors.white.withValues(alpha: 0.05),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

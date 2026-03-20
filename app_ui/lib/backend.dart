@@ -8,16 +8,23 @@ class BackendClient {
   final String baseUrl;
   static const Duration _stateTimeout = Duration(seconds: 10);
   static const Duration _connectTimeout = Duration(seconds: 45);
+  static final http.Client _client = IOClient(_createDirectHttpClient());
+
+  static HttpClient _createDirectHttpClient() {
+    final client = HttpClient();
+    client.findProxy = (_) => 'DIRECT';
+    return client;
+  }
 
   Future<DashboardSnapshot> getState() async {
-    final response = await http
+    final response = await _client
         .get(Uri.parse('$baseUrl/api/v1/state'))
         .timeout(_stateTimeout);
     return _decodeSnapshot(response);
   }
 
   Future<DashboardSnapshot> updateState(AppConfigState config) async {
-    final response = await http
+    final response = await _client
         .put(
           Uri.parse('$baseUrl/api/v1/state'),
           headers: {'Content-Type': 'application/json'},
@@ -28,21 +35,21 @@ class BackendClient {
   }
 
   Future<DashboardSnapshot> connect() async {
-    final response = await http
+    final response = await _client
         .post(Uri.parse('$baseUrl/api/v1/connect'))
         .timeout(_connectTimeout);
     return _decodeSnapshot(response);
   }
 
   Future<DashboardSnapshot> disconnect() async {
-    final response = await http
+    final response = await _client
         .post(Uri.parse('$baseUrl/api/v1/disconnect'))
         .timeout(_connectTimeout);
     return _decodeSnapshot(response);
   }
 
   Future<void> shutdown() async {
-    final response = await http
+    final response = await _client
         .post(Uri.parse('$baseUrl/api/v1/shutdown'))
         .timeout(const Duration(seconds: 8));
     if (response.statusCode >= 400) {
@@ -51,13 +58,14 @@ class BackendClient {
   }
 
   Future<bool> getAdminStatus() async {
-    final response = await http.get(Uri.parse('$baseUrl/api/v1/admin-status'));
+    final response =
+        await _client.get(Uri.parse('$baseUrl/api/v1/admin-status'));
     final body = jsonDecode(response.body) as Map<String, dynamic>;
     return body['elevated'] as bool? ?? false;
   }
 
   Future<void> requestAdmin([String? password]) async {
-    final response = await http.post(
+    final response = await _client.post(
       Uri.parse('$baseUrl/api/v1/request-admin'),
       headers: password == null ? null : {'Content-Type': 'application/json'},
       body: password == null ? null : jsonEncode({'password': password}),

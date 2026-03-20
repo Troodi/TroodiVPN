@@ -1254,6 +1254,7 @@ class _ProfileExportRow extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 _guessFlagFromName('${profile.name} ${profile.address}'),
@@ -1282,8 +1283,9 @@ class _ProfileExportRow extends StatelessWidget {
                   ],
                 ),
               ),
+              const SizedBox(width: 16),
               SizedBox(
-                width: 210,
+                width: 320,
                 child: _DialogPrimaryButton(
                   label: tr('Copy profile'),
                   onPressed: onCopy,
@@ -2959,11 +2961,17 @@ class _DialogPrimaryButton extends StatelessWidget {
             side: BorderSide(color: Colors.white.withValues(alpha: 0.14)),
           ),
         ),
-        child: Text(
-          label,
-          style: const TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w700,
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            label,
+            maxLines: 1,
+            softWrap: false,
+            overflow: TextOverflow.visible,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ),
       ),
@@ -3808,7 +3816,7 @@ class _RulesColumnCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(999),
                   ),
                   child: Text(
-                    '${rules.length} rules',
+                    '${rules.length} ${tr('rules')}',
                     style: TextStyle(
                       color: accent,
                       fontSize: 11,
@@ -6428,56 +6436,22 @@ class _LanguageFlagIcon extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(4),
-        child: switch (language) {
-          AppLanguage.en => Stack(
-              fit: StackFit.expand,
-              children: [
-                Container(color: const Color(0xFFF5F7FB)),
-                Column(
-                  children: List.generate(
-                    7,
-                    (index) => Expanded(
-                      child: Container(
-                        color: index.isEven
-                            ? const Color(0xFFD85C69)
-                            : const Color(0xFFF5F7FB),
-                      ),
-                    ),
-                  ),
-                ),
-                Align(
-                  alignment: Alignment.topLeft,
-                  child: Container(
-                    width: 9,
-                    height: 8,
-                    color: const Color(0xFF3D4D96),
-                  ),
-                ),
-              ],
+        child: ColoredBox(
+          color: Colors.white.withValues(alpha: 0.04),
+          child: Center(
+            child: Text(
+              switch (language) {
+                AppLanguage.en => '🇺🇸',
+                AppLanguage.ru => '🇷🇺',
+                AppLanguage.zh => '🇨🇳',
+              },
+              style: const TextStyle(
+                fontSize: 12,
+                height: 1,
+              ),
             ),
-          AppLanguage.ru => Column(
-              children: const [
-                Expanded(child: ColoredBox(color: Color(0xFFF7F8FB))),
-                Expanded(child: ColoredBox(color: Color(0xFF4E78DB))),
-                Expanded(child: ColoredBox(color: Color(0xFFD85C69))),
-              ],
-            ),
-          AppLanguage.zh => Stack(
-              fit: StackFit.expand,
-              children: const [
-                ColoredBox(color: Color(0xFFD74B43)),
-                Positioned(
-                  top: 1,
-                  left: 2,
-                  child: Icon(
-                    Icons.star_rounded,
-                    size: 8,
-                    color: Color(0xFFF6D04D),
-                  ),
-                ),
-              ],
-            ),
-        },
+          ),
+        ),
       ),
     );
   }

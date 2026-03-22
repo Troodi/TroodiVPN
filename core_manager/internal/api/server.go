@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"os"
 	"time"
@@ -28,6 +29,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/v1/connect", s.handleConnect)
 	mux.HandleFunc("POST /api/v1/disconnect", s.handleDisconnect)
 	mux.HandleFunc("POST /api/v1/shutdown", s.handleShutdown)
+	mux.HandleFunc("POST /api/v1/routing-assets/warm", s.handleWarmRoutingAssets)
 	mux.HandleFunc("GET /api/v1/xray-config", s.handleGetXrayConfig)
 	mux.HandleFunc("GET /api/v1/logs", s.handleGetLogs)
 	mux.HandleFunc("GET /api/v1/admin-status", s.handleGetAdminStatus)
@@ -50,6 +52,10 @@ func (s *Server) handlePutState(w http.ResponseWriter, r *http.Request) {
 		if err := s.runtime.Restart(next); err != nil {
 			next.ConnectionState = config.ConnectionDisconnected
 			s.store.Put(next)
+			if errors.Is(err, xruntime.ErrRoutingAssetsPending) {
+				writeJSON(w, http.StatusServiceUnavailable, s.snapshot())
+				return
+			}
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -59,12 +65,24 @@ func (s *Server) handlePutState(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.store.Put(next)
+	if next.RulesProfile == config.RulesProfileRussia {
+		go s.runtime.BeginRussiaRoutingAssetsWarmup()
+	}
+	writeJSON(w, http.StatusOK, s.snapshot())
+}
+
+func (s *Server) handleWarmRoutingAssets(w http.ResponseWriter, _ *http.Request) {
+	s.runtime.BeginRussiaRoutingAssetsWarmup()
 	writeJSON(w, http.StatusOK, s.snapshot())
 }
 
 func (s *Server) handleConnect(w http.ResponseWriter, _ *http.Request) {
 	cfg := s.store.Get()
 	if err := s.runtime.Start(cfg); err != nil {
+		if errors.Is(err, xruntime.ErrRoutingAssetsPending) {
+			writeJSON(w, http.StatusServiceUnavailable, s.snapshot())
+			return
+		}
 		cfg.ConnectionState = config.ConnectionDisconnected
 		s.store.Put(cfg)
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -199,6 +217,28 @@ func withCORS(next http.Handler) http.Handler {
 func (s *Server) snapshot() StateResponse {
 	cfg := s.store.Get()
 	runtimeStatus := s.runtime.Status()
+	// When profile is Global, hide routine Russia-asset clutter. The client may
+	// still be prefetching rules (profile not saved as Russia until download
+	// completes), so we must not strip downloading/error/progress or on-disk
+	// timestamps — otherwise the modal never sees progress or completion.
+	if cfg.RulesProfile != config.RulesProfileRussia {
+		st := runtimeStatus.RoutingAssetsStatus
+		switch {
+		case st == "downloading" || st == "error":
+			// Keep full runtime payload (per-file progress, errors).
+		case runtimeStatus.RussiaRoutingAssetsUpdatedAt != "":
+			// Files exist on disk; keep updatedAt so prefetch can finish and the
+			// Rules UI can show cache age. Drop per-file rows to save payload.
+			runtimeStatus.RoutingAssetsStatus = "idle"
+			runtimeStatus.RoutingAssetsError = ""
+			runtimeStatus.RoutingAssetsFiles = nil
+		default:
+			runtimeStatus.RussiaRoutingAssetsUpdatedAt = ""
+			runtimeStatus.RoutingAssetsStatus = "idle"
+			runtimeStatus.RoutingAssetsError = ""
+			runtimeStatus.RoutingAssetsFiles = nil
+		}
+	}
 	if !runtimeStatus.Running && cfg.ConnectionState == config.ConnectionConnected {
 		cfg.ConnectionState = config.ConnectionDisconnected
 		s.store.Put(cfg)

@@ -517,6 +517,40 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (!ready) {
         return;
       }
+
+      if (connection == ConnectionStateValue.disconnected &&
+          rulesProfile == RulesProfile.russia) {
+        var snap = await backend.getState();
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _applySnapshot(snap);
+        });
+        if (!_russiaRulesDataReady(snap.runtime)) {
+          final ok = await _showRussiaRulesFirstDownloadDialog(
+            cancelRevertsProfileToGlobal: false,
+          );
+          if (!ok || !mounted) {
+            return;
+          }
+          snap = await backend.getState();
+          if (!mounted) {
+            return;
+          }
+          setState(() {
+            _applySnapshot(snap);
+          });
+          if (!_russiaRulesDataReady(snap.runtime)) {
+            _showMessage(
+              loc(appLanguage, 'Could not download routing rules.'),
+              isError: true,
+            );
+            return;
+          }
+        }
+      }
+
       final snapshot = connection == ConnectionStateValue.connected
           ? await backend.disconnect()
           : await backend.connect();
@@ -872,15 +906,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _RulesModeCard(
             routingMode: routingMode,
             rulesProfile: rulesProfile,
+            language: appLanguage,
+            russiaRulesFailed: runtimeStatus.routingAssetsStatus == 'error',
+            russiaRulesUpdatedAt: runtimeStatus.russiaRoutingAssetsUpdatedAt,
             onModeChanged: (value) =>
                 _saveConfig(_currentConfig().copyWith(routingMode: value)),
             onProfileChanged: (profile) async {
               if (rulesProfile == profile) {
                 return;
               }
-              setState(() {
-                rulesProfile = profile;
-              });
               await _applyRulesProfile(profile);
             },
           ).animate().fadeIn(duration: 240.ms).slideY(
@@ -2134,7 +2168,64 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  bool _russiaRulesDataReady(RuntimeSnapshot r) {
+    if (r.routingAssetsStatus == 'error') {
+      return false;
+    }
+    return r.russiaRoutingAssetsUpdatedAt.isNotEmpty;
+  }
+
+  Future<bool> _showRussiaRulesFirstDownloadDialog({
+    bool cancelRevertsProfileToGlobal = true,
+  }) async {
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => _RussiaRulesFirstDownloadDialog(
+        backend: backend,
+        language: appLanguage,
+        cancelRevertsProfileToGlobal: cancelRevertsProfileToGlobal,
+      ),
+    );
+    return result ?? false;
+  }
+
   Future<void> _applyRulesProfile(RulesProfile profile) async {
+    if (profile == RulesProfile.global) {
+      await _saveConfig(
+        _currentConfig().copyWith(rulesProfile: profile),
+      );
+      return;
+    }
+    final readyBackend = await _ensureBackendReady();
+    if (!readyBackend) {
+      return;
+    }
+    var snap = await backend.getState();
+    if (!_russiaRulesDataReady(snap.runtime)) {
+      final ok = await _showRussiaRulesFirstDownloadDialog();
+      if (!ok) {
+        if (mounted) {
+          await _saveConfig(
+            _currentConfig().copyWith(rulesProfile: RulesProfile.global),
+          );
+        }
+        return;
+      }
+      if (!mounted) {
+        return;
+      }
+      snap = await backend.getState();
+      if (!_russiaRulesDataReady(snap.runtime)) {
+        if (mounted) {
+          _showMessage(
+            loc(appLanguage, 'Could not download routing rules.'),
+            isError: true,
+          );
+        }
+        return;
+      }
+    }
     await _saveConfig(
       _currentConfig().copyWith(
         rulesProfile: profile,

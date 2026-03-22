@@ -7,7 +7,8 @@ class BackendClient {
 
   final String baseUrl;
   static const Duration _stateTimeout = Duration(seconds: 10);
-  static const Duration _connectTimeout = Duration(seconds: 45);
+  static const Duration _connectTimeout = Duration(seconds: 90);
+
   static final http.Client _client = IOClient(_createDirectHttpClient());
 
   static HttpClient _createDirectHttpClient() {
@@ -31,13 +32,20 @@ class BackendClient {
           body: jsonEncode(config.toJson()),
         )
         .timeout(_stateTimeout);
-    return _decodeSnapshot(response);
+    return _decodeSnapshot(response, acceptServiceUnavailable: true);
   }
 
   Future<DashboardSnapshot> connect() async {
     final response = await _client
         .post(Uri.parse('$baseUrl/api/v1/connect'))
         .timeout(_connectTimeout);
+    return _decodeSnapshot(response, acceptServiceUnavailable: true);
+  }
+
+  Future<DashboardSnapshot> warmRoutingAssets() async {
+    final response = await _client
+        .post(Uri.parse('$baseUrl/api/v1/routing-assets/warm'))
+        .timeout(_stateTimeout);
     return _decodeSnapshot(response);
   }
 
@@ -75,7 +83,10 @@ class BackendClient {
     }
   }
 
-  DashboardSnapshot _decodeSnapshot(http.Response response) {
+  DashboardSnapshot _decodeSnapshot(
+    http.Response response, {
+    bool acceptServiceUnavailable = false,
+  }) {
     Map<String, dynamic> body = <String, dynamic>{};
     if (response.body.isNotEmpty) {
       try {
@@ -86,6 +97,9 @@ class BackendClient {
       } on FormatException {
         body = {'error': response.body};
       }
+    }
+    if (response.statusCode == 503 && acceptServiceUnavailable) {
+      return DashboardSnapshot.fromJson(body);
     }
     if (response.statusCode >= 400) {
       throw Exception((body['error'] ?? response.body).toString());

@@ -28,8 +28,9 @@ func main() {
 	}
 	runtime := xruntime.NewManager(xruntime.DefaultBinaryPath())
 	go func() {
-		if err := runtime.WarmRoutingAssets(); err != nil {
-			log.Printf("routing assets warmup failed: %v", err)
+		cfg := store.Get()
+		if cfg.RulesProfile == config.RulesProfileRussia {
+			runtime.BeginRussiaRoutingAssetsWarmup()
 		}
 	}()
 	handler := api.NewServer(store, runtime)

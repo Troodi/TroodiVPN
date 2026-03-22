@@ -34,24 +34,31 @@ const (
 	runetFreedomGeoIPURL   = "https://raw.githubusercontent.com/runetfreedom/russia-v2ray-rules-dat/release/geoip.dat"
 	loyalSoldierGeoSiteURL = "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat"
 	loyalSoldierGeoIPURL   = "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat"
-	routingAssetsTTL       = 24 * time.Hour
+	routingAssetsTTL       = 6 * time.Hour
+
+	// Local mixed inbound; must match xray buildInbounds.
+	localMixedInboundAddr = "127.0.0.1:10808"
 )
 
 type Status struct {
-	Running     bool     `json:"running"`
-	PID         int      `json:"pid"`
-	BinaryPath  string   `json:"binaryPath"`
-	ConfigPath  string   `json:"configPath"`
-	LastError   string   `json:"lastError,omitempty"`
-	LastExit    string   `json:"lastExit,omitempty"`
-	Mode        string   `json:"mode"`
-	LatencyMS   int      `json:"latencyMs"`
-	PublicIP    string   `json:"publicIp"`
-	DownloadBps uint64   `json:"downloadBps"`
-	UploadBps   uint64   `json:"uploadBps"`
-	Ready       bool     `json:"ready"`
-	Elevated    bool     `json:"elevated"`
-	Logs        []string `json:"logs"`
+	Running                      bool                       `json:"running"`
+	PID                          int                        `json:"pid"`
+	BinaryPath                   string                     `json:"binaryPath"`
+	ConfigPath                   string                     `json:"configPath"`
+	LastError                    string                     `json:"lastError,omitempty"`
+	LastExit                     string                     `json:"lastExit,omitempty"`
+	Mode                         string                     `json:"mode"`
+	LatencyMS                    int                        `json:"latencyMs"`
+	PublicIP                     string                     `json:"publicIp"`
+	DownloadBps                  uint64                     `json:"downloadBps"`
+	UploadBps                    uint64                     `json:"uploadBps"`
+	Ready                        bool                       `json:"ready"`
+	Elevated                     bool                       `json:"elevated"`
+	Logs                         []string                   `json:"logs"`
+	RoutingAssetsStatus          string                     `json:"routingAssetsStatus"`
+	RoutingAssetsError           string                     `json:"routingAssetsError,omitempty"`
+	RoutingAssetsFiles           []RoutingAssetFileProgress `json:"routingAssetsFiles"`
+	RussiaRoutingAssetsUpdatedAt string                     `json:"russiaRoutingAssetsUpdatedAt,omitempty"`
 }
 
 type Manager struct {
@@ -76,15 +83,16 @@ type Manager struct {
 	lastIPLookupAt time.Time
 	proxyState     *platform.ProxySettings
 	tunState       *platform.TUNState
+
+	assetsMu                 sync.Mutex
+	routingAssetsStatus      string
+	routingAssetsErr         string
+	routingAssetsDownloadRun bool
+	routingAssetFiles        []RoutingAssetFileProgress
 }
 
 func NewManager(binaryPath string) *Manager {
-	return &Manager{binaryPath: binaryPath}
-}
-
-func (m *Manager) WarmRoutingAssets() error {
-	_, err := m.ensureRoutingAssets(false)
-	return err
+	return &Manager{binaryPath: binaryPath, routingAssetsStatus: "idle"}
 }
 
 func DefaultBinaryPath() string {
@@ -169,20 +177,26 @@ func (m *Manager) Status() Status {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	raSt, raErr, raFiles, raUpdated := m.routingAssetsSnapshotForStatus()
+
 	status := Status{
-		Running:     m.running,
-		BinaryPath:  m.binaryPath,
-		ConfigPath:  m.configPath,
-		LastError:   m.lastError,
-		LastExit:    m.lastExit,
-		Mode:        m.mode,
-		LatencyMS:   m.latencyMS,
-		PublicIP:    m.publicIP,
-		DownloadBps: m.downloadBps,
-		UploadBps:   m.uploadBps,
-		Ready:       m.ready,
-		Elevated:    platform.IsElevated(),
-		Logs:        append([]string(nil), m.logs...),
+		Running:                      m.running,
+		BinaryPath:                   m.binaryPath,
+		ConfigPath:                   m.configPath,
+		LastError:                    m.lastError,
+		LastExit:                     m.lastExit,
+		Mode:                         m.mode,
+		LatencyMS:                    m.latencyMS,
+		PublicIP:                     m.publicIP,
+		DownloadBps:                  m.downloadBps,
+		UploadBps:                    m.uploadBps,
+		Ready:                        m.ready,
+		Elevated:                     platform.IsElevated(),
+		Logs:                         append([]string(nil), m.logs...),
+		RoutingAssetsStatus:          raSt,
+		RoutingAssetsError:           raErr,
+		RoutingAssetsFiles:           raFiles,
+		RussiaRoutingAssetsUpdatedAt: raUpdated,
 	}
 
 	if m.running && m.cmd != nil && m.cmd.Process != nil {
@@ -198,7 +212,7 @@ func (m *Manager) startLocked(cfg config.AppConfig) error {
 	if err := m.ensureBinaryLocked(); err != nil {
 		return err
 	}
-	assetDir, err := m.ensureRoutingAssetsLocked(cfg)
+	assetDir, err := m.startLockedRussiaAssetPath(cfg)
 	if err != nil {
 		return err
 	}
@@ -393,55 +407,6 @@ func (m *Manager) ensureBinaryLocked() error {
 	return nil
 }
 
-func (m *Manager) ensureRoutingAssetsLocked(cfg config.AppConfig) (string, error) {
-	return m.ensureRoutingAssets(cfg.RulesProfile == config.RulesProfileRussia)
-}
-
-func (m *Manager) ensureRoutingAssets(enabled bool) (string, error) {
-	return m.ensureRoutingAssetsInternal(enabled, false)
-}
-
-func (m *Manager) ensureRoutingAssetsInternal(enabled bool, force bool) (string, error) {
-	assetDir, err := defaultAssetDir()
-	if err != nil {
-		return "", err
-	}
-	if err := os.MkdirAll(assetDir, 0o755); err != nil {
-		return "", err
-	}
-
-	if !enabled {
-		return assetDir, nil
-	}
-
-	required := []struct {
-		name string
-		url  string
-	}{
-		{name: "geosite.dat", url: runetFreedomGeoSiteURL},
-		{name: "geoip.dat", url: runetFreedomGeoIPURL},
-		{name: "geosite-ls.dat", url: loyalSoldierGeoSiteURL},
-		{name: "geoip-ls.dat", url: loyalSoldierGeoIPURL},
-	}
-
-	for _, asset := range required {
-		path := filepath.Join(assetDir, asset.name)
-		if !force && isFreshFile(path, routingAssetsTTL) {
-			continue
-		}
-		if err := downloadFile(asset.url, path); err != nil {
-			if _, statErr := os.Stat(path); statErr == nil {
-				m.appendLog(fmt.Sprintf("[%s] failed to refresh %s, using cached copy: %v", time.Now().Format(time.RFC3339), asset.name, err))
-				continue
-			}
-			return "", fmt.Errorf("failed to download %s: %w", asset.name, err)
-		}
-		m.appendLog(fmt.Sprintf("[%s] updated routing asset %s", time.Now().Format(time.RFC3339), asset.name))
-	}
-
-	return assetDir, nil
-}
-
 func (m *Manager) appendLog(line string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -467,6 +432,10 @@ func isFreshFile(path string, ttl time.Duration) bool {
 }
 
 func downloadFile(url, path string) error {
+	return downloadFileWithProgress(url, path, nil)
+}
+
+func downloadFileWithProgress(url, path string, onProgress func(downloaded, total int64)) error {
 	client := &http.Client{Timeout: 2 * time.Minute}
 	response, err := client.Get(url)
 	if err != nil {
@@ -478,16 +447,49 @@ func downloadFile(url, path string) error {
 		return fmt.Errorf("unexpected status %s", response.Status)
 	}
 
+	var total int64
+	if response.ContentLength > 0 {
+		total = response.ContentLength
+	}
+	if onProgress != nil {
+		onProgress(0, total)
+	}
+
 	tmpPath := path + ".tmp"
 	file, err := os.Create(tmpPath)
 	if err != nil {
 		return err
 	}
 
+	buf := make([]byte, 32*1024)
+	var downloaded int64
+	lastReport := int64(-1)
+	const reportStep = 64 * 1024
+
 	copyErr := func() error {
 		defer file.Close()
-		if _, err := io.Copy(file, response.Body); err != nil {
-			return err
+		for {
+			n, rerr := response.Body.Read(buf)
+			if n > 0 {
+				if _, werr := file.Write(buf[:n]); werr != nil {
+					return werr
+				}
+				downloaded += int64(n)
+				if onProgress != nil &&
+					(lastReport < 0 || downloaded-lastReport >= reportStep || (total > 0 && downloaded == total)) {
+					onProgress(downloaded, total)
+					lastReport = downloaded
+				}
+			}
+			if rerr == io.EOF {
+				break
+			}
+			if rerr != nil {
+				return rerr
+			}
+		}
+		if onProgress != nil {
+			onProgress(downloaded, total)
 		}
 		return file.Sync()
 	}()
@@ -987,13 +989,15 @@ func (m *Manager) stopMetricsLoopLocked() {
 }
 
 func (m *Manager) refreshRuntimeMetrics(cfg config.AppConfig) {
-	latency := measureLatency(cfg)
-	publicIP := ""
-
 	m.mu.Lock()
+	running := m.running
+	mode := m.mode
 	shouldRefreshIP := m.publicIP == "" || time.Since(m.lastIPLookupAt) >= 10*time.Second
 	currentIP := m.publicIP
 	m.mu.Unlock()
+
+	latency := measureLatency(cfg)
+	publicIP := ""
 
 	if shouldRefreshIP {
 		if ip, err := lookupExternalIP(cfg); err == nil {
@@ -1005,8 +1009,16 @@ func (m *Manager) refreshRuntimeMetrics(cfg config.AppConfig) {
 
 	downloadBps, uploadBps := m.measureProcessIO()
 
+	localInboundReady := false
+	if running && mode == "proxy" {
+		localInboundReady = mixedInboundListening()
+	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if !m.running {
+		return
+	}
 	m.latencyMS = latency
 	if publicIP != "" {
 		m.publicIP = publicIP
@@ -1014,7 +1026,16 @@ func (m *Manager) refreshRuntimeMetrics(cfg config.AppConfig) {
 	}
 	m.downloadBps = downloadBps
 	m.uploadBps = uploadBps
-	m.ready = m.running && (m.mode == "tun" || m.latencyMS > 0 || m.publicIP != "")
+	m.ready = m.running && (m.mode == "tun" || localInboundReady || m.latencyMS > 0 || m.publicIP != "")
+}
+
+func mixedInboundListening() bool {
+	conn, err := net.DialTimeout("tcp", localMixedInboundAddr, 800*time.Millisecond)
+	if err != nil {
+		return false
+	}
+	_ = conn.Close()
+	return true
 }
 
 func measureLatency(cfg config.AppConfig) int {

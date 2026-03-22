@@ -177,6 +177,32 @@ class AppConfigState {
   }
 }
 
+class RoutingAssetFileInfo {
+  const RoutingAssetFileInfo({
+    required this.name,
+    required this.status,
+    required this.error,
+    this.downloaded = 0,
+    this.total = 0,
+  });
+
+  final String name;
+  final String status;
+  final String error;
+  final int downloaded;
+  final int total;
+
+  factory RoutingAssetFileInfo.fromJson(Map<String, dynamic> json) {
+    return RoutingAssetFileInfo(
+      name: json['name'] as String? ?? '',
+      status: json['status'] as String? ?? 'pending',
+      error: json['error'] as String? ?? '',
+      downloaded: (json['downloaded'] as num?)?.toInt() ?? 0,
+      total: (json['total'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
 class RuntimeSnapshot {
   const RuntimeSnapshot({
     required this.running,
@@ -193,6 +219,10 @@ class RuntimeSnapshot {
     required this.ready,
     required this.elevated,
     required this.logs,
+    required this.routingAssetsStatus,
+    required this.routingAssetsError,
+    required this.routingAssetsFiles,
+    required this.russiaRoutingAssetsUpdatedAt,
   });
 
   static const empty = RuntimeSnapshot(
@@ -210,6 +240,10 @@ class RuntimeSnapshot {
     ready: false,
     elevated: false,
     logs: <String>[],
+    routingAssetsStatus: 'idle',
+    routingAssetsError: '',
+    routingAssetsFiles: <RoutingAssetFileInfo>[],
+    russiaRoutingAssetsUpdatedAt: '',
   );
 
   final bool running;
@@ -226,6 +260,10 @@ class RuntimeSnapshot {
   final bool ready;
   final bool elevated;
   final List<String> logs;
+  final String routingAssetsStatus;
+  final String routingAssetsError;
+  final List<RoutingAssetFileInfo> routingAssetsFiles;
+  final String russiaRoutingAssetsUpdatedAt;
 
   bool get isSafeTunMode => mode == 'tun' && latencyMs == 0;
 
@@ -245,8 +283,22 @@ class RuntimeSnapshot {
       ready: json['ready'] as bool? ?? false,
       elevated: json['elevated'] as bool? ?? false,
       logs: _stringList(json['logs']),
+      routingAssetsStatus: json['routingAssetsStatus'] as String? ?? 'idle',
+      routingAssetsError: json['routingAssetsError'] as String? ?? '',
+      routingAssetsFiles: _routingAssetFiles(json['routingAssetsFiles']),
+      russiaRoutingAssetsUpdatedAt:
+          json['russiaRoutingAssetsUpdatedAt'] as String? ?? '',
     );
   }
+}
+
+List<RoutingAssetFileInfo> _routingAssetFiles(dynamic raw) {
+  if (raw is! List<dynamic>) {
+    return const [];
+  }
+  return raw
+      .map((e) => RoutingAssetFileInfo.fromJson(e as Map<String, dynamic>))
+      .toList();
 }
 
 class DashboardSnapshot {

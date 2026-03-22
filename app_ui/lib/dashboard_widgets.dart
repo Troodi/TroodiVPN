@@ -2250,12 +2250,18 @@ class _RulesModeCard extends StatelessWidget {
     required this.rulesProfile,
     required this.onModeChanged,
     required this.onProfileChanged,
+    required this.language,
+    required this.russiaRulesFailed,
+    required this.russiaRulesUpdatedAt,
   });
 
   final RoutingMode routingMode;
   final RulesProfile rulesProfile;
   final ValueChanged<RoutingMode> onModeChanged;
   final ValueChanged<RulesProfile> onProfileChanged;
+  final AppLanguage language;
+  final bool russiaRulesFailed;
+  final String russiaRulesUpdatedAt;
 
   @override
   Widget build(BuildContext context) {
@@ -2356,6 +2362,12 @@ class _RulesModeCard extends StatelessWidget {
               ),
               _ProfileChoiceChip(
                 label: tr('Russia (Smart)'),
+                subtitle: russiaRulesFailed
+                    ? loc(language, 'Russia rules download failed hint')
+                    : (russiaRulesUpdatedAt.isNotEmpty
+                        ? '${loc(language, 'Rules DB updated')}: ${_formatRussiaRulesUpdatedAt(russiaRulesUpdatedAt)}'
+                        : null),
+                attention: russiaRulesFailed,
                 selected: rulesProfile == RulesProfile.russia,
                 onTap: () => onProfileChanged(RulesProfile.russia),
               ),
@@ -2389,16 +2401,334 @@ class _RulesModeCard extends StatelessWidget {
   }
 }
 
+String _formatRussiaRulesUpdatedAt(String rfc3339) {
+  if (rfc3339.isEmpty) {
+    return '';
+  }
+  try {
+    final d = DateTime.parse(rfc3339).toLocal();
+    final dd = d.day.toString().padLeft(2, '0');
+    final mm = d.month.toString().padLeft(2, '0');
+    final hh = d.hour.toString().padLeft(2, '0');
+    final mi = d.minute.toString().padLeft(2, '0');
+    return '$dd.$mm.${d.year} $hh:$mi';
+  } catch (_) {
+    return rfc3339;
+  }
+}
+
+class _RussiaRulesFirstDownloadDialog extends StatefulWidget {
+  const _RussiaRulesFirstDownloadDialog({
+    required this.backend,
+    required this.language,
+    this.cancelRevertsProfileToGlobal = true,
+  });
+
+  final BackendClient backend;
+  final AppLanguage language;
+  final bool cancelRevertsProfileToGlobal;
+
+  @override
+  State<_RussiaRulesFirstDownloadDialog> createState() =>
+      _RussiaRulesFirstDownloadDialogState();
+}
+
+class _RussiaRulesFirstDownloadDialogState
+    extends State<_RussiaRulesFirstDownloadDialog> {
+  Timer? _timer;
+  DashboardSnapshot? _snap;
+  bool _retryBusy = false;
+  bool _downloadFailedInSession = false;
+
+  static const _defaultFiles = <String>[
+    'geosite.dat',
+    'geoip.dat',
+    'geosite-ls.dat',
+    'geoip-ls.dat',
+  ];
+
+  bool _hasFailure(RuntimeSnapshot? rt) {
+    if (rt == null) {
+      return false;
+    }
+    if (rt.routingAssetsStatus == 'error') {
+      return true;
+    }
+    return rt.routingAssetsFiles.any((f) => f.status == 'error');
+  }
+
+  bool _isActivelyDownloading(RuntimeSnapshot? rt) {
+    return rt != null && rt.routingAssetsStatus == 'downloading';
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_kick());
+    _timer = Timer.periodic(const Duration(milliseconds: 450), (_) async {
+      try {
+        final snap = await widget.backend.getState();
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _snap = snap;
+          if (_hasFailure(snap.runtime)) {
+            _downloadFailedInSession = true;
+          }
+        });
+        if (snap.runtime.russiaRoutingAssetsUpdatedAt.isNotEmpty &&
+            snap.runtime.routingAssetsStatus != 'error') {
+          _timer?.cancel();
+          if (mounted) {
+            Navigator.of(context).pop(true);
+          }
+        }
+      } catch (_) {}
+    });
+  }
+
+  Future<void> _kick() async {
+    try {
+      final snap = await widget.backend.warmRoutingAssets();
+      if (mounted) {
+        setState(() {
+          _snap = snap;
+          if (_hasFailure(snap.runtime)) {
+            _downloadFailedInSession = true;
+          }
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _retryDownload() async {
+    setState(() => _retryBusy = true);
+    try {
+      final snap = await widget.backend.warmRoutingAssets();
+      if (mounted) {
+        setState(() {
+          _snap = snap;
+          _retryBusy = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _retryBusy = false);
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final rt = _snap?.runtime;
+    final files = (rt != null && rt.routingAssetsFiles.isNotEmpty)
+        ? rt.routingAssetsFiles
+        : [
+            for (final n in _defaultFiles)
+              RoutingAssetFileInfo(name: n, status: 'pending', error: ''),
+          ];
+
+    final downloading = _isActivelyDownloading(rt);
+    final canRetry =
+        _downloadFailedInSession && !downloading && !_retryBusy;
+
+    final cancelLabel = widget.cancelRevertsProfileToGlobal
+        ? loc(widget.language, 'Cancel and switch to Global')
+        : loc(widget.language, 'Cancel');
+
+    return _DialogShell(
+      maxWidth: 480,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            loc(widget.language, 'Russia rules download title'),
+            style: TextStyle(
+              color: AppPalette.homeText.withValues(alpha: 0.96),
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            loc(widget.language, 'Russia rules download description'),
+            style: TextStyle(
+              color: AppPalette.homeTextMuted.withValues(alpha: 0.88),
+              height: 1.45,
+            ),
+          ),
+          const SizedBox(height: 18),
+          ...files.map((f) {
+            final done = f.status == 'done';
+            final err = f.status == 'error';
+            final loading = f.status == 'downloading';
+            final pending = f.status == 'pending';
+            final total = f.total;
+            final downloaded = f.downloaded;
+            double? barValue;
+            if (done) {
+              barValue = 1;
+            } else if (!err && loading && total > 0) {
+              barValue = (downloaded / total).clamp(0.0, 1.0);
+            } else if (!err && pending) {
+              barValue = 0;
+            } else if (!err && loading && total <= 0) {
+              barValue = null;
+            } else if (err && total > 0) {
+              barValue = (downloaded / total).clamp(0.0, 1.0);
+            } else {
+              barValue = 0;
+            }
+
+            final track = Colors.white.withValues(alpha: 0.08);
+            final fill = err
+                ? Colors.redAccent.shade200
+                : done
+                    ? Colors.greenAccent.shade200
+                    : AppPalette.homeAccent.withValues(alpha: 0.9);
+
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: err
+                            ? Icon(Icons.error_outline,
+                                color: Colors.redAccent.shade200, size: 20)
+                            : done
+                                ? Icon(Icons.check_circle_rounded,
+                                    color: Colors.greenAccent.shade200,
+                                    size: 20)
+                                : loading
+                                    ? Icon(Icons.cloud_download_rounded,
+                                        color: AppPalette.homeAccent
+                                            .withValues(alpha: 0.9),
+                                        size: 20)
+                                    : Icon(Icons.schedule_rounded,
+                                        color: Colors.white
+                                            .withValues(alpha: 0.28),
+                                        size: 20),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          f.name,
+                          style: TextStyle(
+                            color:
+                                AppPalette.homeText.withValues(alpha: 0.92),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: LinearProgressIndicator(
+                      value: barValue,
+                      minHeight: 6,
+                      backgroundColor: track,
+                      color: fill,
+                    ),
+                  ),
+                  if (err && f.error.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 32),
+                      child: Text(
+                        f.error,
+                        style: TextStyle(
+                          color: Colors.redAccent.shade100,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            );
+          }),
+          if (rt != null && rt.routingAssetsError.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              rt.routingAssetsError,
+              style: TextStyle(
+                color: Colors.redAccent.shade100,
+                fontSize: 12,
+              ),
+            ),
+          ],
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              _DialogSecondaryButton(
+                label: cancelLabel,
+                onPressed: _retryBusy
+                    ? null
+                    : () {
+                        Navigator.of(context).pop(false);
+                      },
+              ),
+              if (_downloadFailedInSession) ...[
+                const SizedBox(width: 10),
+                if (_retryBusy)
+                  const SizedBox(
+                    height: 48,
+                    width: 48,
+                    child: Center(
+                      child: SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    ),
+                  )
+                else
+                  _DialogPrimaryButton(
+                    label: loc(
+                        widget.language, 'Retry Russia rules download'),
+                    onPressed: canRetry ? _retryDownload : null,
+                  ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ProfileChoiceChip extends StatelessWidget {
   const _ProfileChoiceChip({
     required this.label,
     required this.selected,
     required this.onTap,
+    this.subtitle,
+    this.attention = false,
   });
 
   final String label;
   final bool selected;
   final VoidCallback onTap;
+  final String? subtitle;
+  final bool attention;
 
   @override
   Widget build(BuildContext context) {
@@ -2424,18 +2754,40 @@ class _ProfileChoiceChip extends StatelessWidget {
               color: selected ? null : Colors.white.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(999),
               border: Border.all(
-                color: selected
-                    ? AppPalette.homeAccent.withValues(alpha: 0.65)
-                    : Colors.white.withValues(alpha: 0.08),
+                color: attention
+                    ? Colors.orangeAccent.withValues(alpha: 0.75)
+                    : selected
+                        ? AppPalette.homeAccent.withValues(alpha: 0.65)
+                        : Colors.white.withValues(alpha: 0.08),
+                width: attention ? 1.6 : 1,
               ),
             ),
-            child: Text(
-              label,
-              style: TextStyle(
-                color: AppPalette.homeText.withValues(alpha: 0.95),
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: AppPalette.homeText.withValues(alpha: 0.95),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                if (subtitle != null && subtitle!.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle!,
+                    style: TextStyle(
+                      color: attention
+                          ? Colors.orangeAccent.withValues(alpha: 0.92)
+                          : AppPalette.homeTextMuted.withValues(alpha: 0.75),
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
         ),

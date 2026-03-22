@@ -249,6 +249,16 @@ const Map<String, String> ruTranslations = {
       r'Из буфера обмена импортировано профилей: ${imported.length}.',
   r'${imported.length} profiles added.':
       r'Добавлено профилей: ${imported.length}.',
+  'Russia rules download title': 'Загрузка правил для России (умный режим)',
+  'Russia rules download description':
+      'Скачиваются четыре базы геоданных (один раз, затем кэш на диске). Фоновое обновление — не чаще чем раз в 6 часов.',
+  'Cancel and switch to Global': 'Отмена (оставить «Глобальный»)',
+  'Rules DB updated': 'Базы обновлены',
+  'Could not download routing rules.':
+      'Не удалось загрузить файлы правил. Проверьте сеть.',
+  'Retry Russia rules download': 'Скачать снова',
+  'Russia rules download failed hint':
+      'Загрузка не завершена — нажмите, чтобы повторить',
 };
 
 const Map<String, String> zhTranslations = {
@@ -487,4 +497,12 @@ const Map<String, String> zhTranslations = {
   'Administrator access required': '需要管理员权限',
   'VPN (TUN) on Linux needs sudo to start Xray and configure routes. The password is kept only in memory until the app is restarted.':
       'Linux 上的 VPN（TUN）需要 sudo 来启动 Xray 并配置路由。密码只会保存在内存中，直到应用重启。',
+  'Russia rules download title': '正在加载俄罗斯（智能）规则',
+  'Russia rules download description':
+      '正在下载四个地理数据库（仅首次，之后缓存在本地）。后台每 6 小时最多更新一次。',
+  'Cancel and switch to Global': '取消（保持全局）',
+  'Rules DB updated': '规则库更新',
+  'Could not download routing rules.': '无法下载规则文件，请检查网络。',
+  'Retry Russia rules download': '重新下载',
+  'Russia rules download failed hint': '未全部下载完成 — 请点击重试',
 };

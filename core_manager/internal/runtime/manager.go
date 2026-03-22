@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -83,6 +84,12 @@ type Manager struct {
 	lastIPLookupAt time.Time
 	proxyState     *platform.ProxySettings
 	tunState       *platform.TUNState
+
+	xrayBaselineInDown uint64
+	xrayBaselineUpSum  uint64
+	xrayBaselineAt     time.Time
+	xrayBaselineTag    string
+	ipLookupInflight   bool
 
 	assetsMu                 sync.Mutex
 	routingAssetsStatus      string
@@ -232,24 +239,34 @@ func (m *Manager) startLocked(cfg config.AppConfig) error {
 			return err
 		}
 
-		m.appendLogLocked(fmt.Sprintf("[%s] TUN: capturing default route", time.Now().Format(time.RFC3339)))
-		defaultRoute, err := platform.CaptureDefaultRoute()
-		if err != nil {
-			return err
-		}
-		m.appendLogLocked(fmt.Sprintf("[%s] TUN: default route captured in %d ms", time.Now().Format(time.RFC3339), time.Since(startedAt).Milliseconds()))
+		m.appendLogLocked(fmt.Sprintf("[%s] TUN: default route + upstream DNS resolve (parallel)", time.Now().Format(time.RFC3339)))
 		activeProfile := activeProfile(cfg)
+		var defaultRoute *platform.DefaultRoute
+		var bypassCIDRs []string
+		var captureErr, bypassErr error
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			defaultRoute, captureErr = platform.CaptureDefaultRoute()
+		}()
+		go func() {
+			defer wg.Done()
+			bypassCIDRs, bypassErr = resolveBypassCIDRs(activeProfile)
+		}()
+		wg.Wait()
+		if captureErr != nil {
+			return captureErr
+		}
+		if bypassErr != nil {
+			return bypassErr
+		}
+		m.appendLogLocked(fmt.Sprintf("[%s] TUN: route/DNS stage done in %d ms", time.Now().Format(time.RFC3339), time.Since(startedAt).Milliseconds()))
 		buildOptions.BindInterface = defaultRoute.InterfaceAlias
 		buildOptions.BindAddress = defaultRoute.IPAddress
 		tunOptions.ManageRoutes = true
 		tunOptions.DefaultRoute = defaultRoute
-		if tunOptions.ManageRoutes {
-			bypassCIDRs, err := resolveBypassCIDRs(activeProfile)
-			if err != nil {
-				return err
-			}
-			tunOptions.BypassCIDRs = bypassCIDRs
-		}
+		tunOptions.BypassCIDRs = bypassCIDRs
 		buildOptions.TUNInterface = tunOptions.InterfaceAlias
 		buildOptions.TUNAddress = tunOptions.IPAddress
 		buildOptions.TUNMTU = tunOptions.MTU
@@ -331,10 +348,9 @@ func (m *Manager) startLocked(cfg config.AppConfig) error {
 		m.ready = true
 		m.appendLogLocked(fmt.Sprintf("[%s] TUN: adapter and routes ready in %d ms", time.Now().Format(time.RFC3339), time.Since(prepareStartedAt).Milliseconds()))
 	}
-	m.startMetricsLoopLocked(cfg)
 	go m.waitForExit(cmd)
 
-	time.Sleep(300 * time.Millisecond)
+	time.Sleep(150 * time.Millisecond)
 	if !m.running {
 		status := m.Status()
 		if status.LastExit != "" {
@@ -342,6 +358,12 @@ func (m *Manager) startLocked(cfg config.AppConfig) error {
 		}
 		return errors.New("xray exited immediately after start")
 	}
+
+	m.startMetricsLoopLocked(cfg)
+	go func(cfg config.AppConfig) {
+		time.Sleep(200 * time.Millisecond)
+		m.refreshRuntimeMetrics(cfg)
+	}(cfg)
 
 	if cfg.TUNEnabled {
 		m.appendLogLocked(fmt.Sprintf("[%s] TUN: total startup completed in %d ms", time.Now().Format(time.RFC3339), time.Since(startedAt).Milliseconds()))
@@ -669,14 +691,16 @@ func resolveBypassCIDRs(profile config.ServerProfile) ([]string, error) {
 		return []string{ip.String() + "/128"}, nil
 	}
 
-	ips, err := net.LookupIP(profile.Address)
+	ctx, cancel := context.WithTimeout(context.Background(), 2500*time.Millisecond)
+	defer cancel()
+	addrs, err := net.DefaultResolver.LookupIPAddr(ctx, profile.Address)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve upstream host %q for full TUN mode: %w", profile.Address, err)
 	}
 
-	cidrs := make([]string, 0, len(ips))
-	for _, ip := range ips {
-		if ipv4 := ip.To4(); ipv4 != nil {
+	cidrs := make([]string, 0, len(addrs))
+	for _, a := range addrs {
+		if ipv4 := a.IP.To4(); ipv4 != nil {
 			cidrs = append(cidrs, ipv4.String()+"/32")
 		}
 	}
@@ -997,17 +1021,53 @@ func (m *Manager) refreshRuntimeMetrics(cfg config.AppConfig) {
 	m.mu.Unlock()
 
 	latency := measureLatency(cfg)
-	publicIP := ""
+	publicIP := currentIP
 
 	if shouldRefreshIP {
-		if ip, err := lookupExternalIP(cfg); err == nil {
-			publicIP = ip
+		m.mu.Lock()
+		startLookup := !m.ipLookupInflight
+		if startLookup {
+			m.ipLookupInflight = true
 		}
-	} else {
-		publicIP = currentIP
+		m.mu.Unlock()
+		if startLookup {
+			go func(cfg config.AppConfig) {
+				defer func() {
+					m.mu.Lock()
+					m.ipLookupInflight = false
+					m.mu.Unlock()
+				}()
+				ip, err := lookupExternalIP(cfg)
+				if err != nil {
+					return
+				}
+				m.mu.Lock()
+				if m.running {
+					m.publicIP = ip
+					m.lastIPLookupAt = time.Now()
+				}
+				m.mu.Unlock()
+			}(cfg)
+		}
 	}
 
-	downloadBps, uploadBps := m.measureProcessIO()
+	readBps, writeBps := m.measureProcessIO()
+	var downloadBps, uploadBps uint64
+	if running {
+		if d, u, ok := m.measureXrayInboundBps(context.Background(), mode); ok {
+			downloadBps = d
+			uploadBps = u
+		} else {
+			// Fallback: process I/O (approximate; often asymmetric on Windows).
+			if readBps > 0 && writeBps > 0 {
+				downloadBps = writeBps
+				uploadBps = readBps
+			} else if total := readBps + writeBps; total > 0 {
+				uploadBps = total / 2
+				downloadBps = total - uploadBps
+			}
+		}
+	}
 
 	localInboundReady := false
 	if running && mode == "proxy" {
@@ -1017,6 +1077,10 @@ func (m *Manager) refreshRuntimeMetrics(cfg config.AppConfig) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if !m.running {
+		m.clearXrayTrafficBaseline()
+		m.ipLookupInflight = false
+		m.downloadBps = 0
+		m.uploadBps = 0
 		return
 	}
 	m.latencyMS = latency
@@ -1030,7 +1094,7 @@ func (m *Manager) refreshRuntimeMetrics(cfg config.AppConfig) {
 }
 
 func mixedInboundListening() bool {
-	conn, err := net.DialTimeout("tcp", localMixedInboundAddr, 800*time.Millisecond)
+	conn, err := net.DialTimeout("tcp", localMixedInboundAddr, 250*time.Millisecond)
 	if err != nil {
 		return false
 	}
@@ -1043,14 +1107,10 @@ func measureLatency(cfg config.AppConfig) int {
 	if profile.Address != "" && profile.Port > 0 {
 		address := net.JoinHostPort(profile.Address, strconv.Itoa(profile.Port))
 		startedAt := time.Now()
-		conn, err := net.DialTimeout("tcp", address, 2*time.Second)
+		conn, err := net.DialTimeout("tcp", address, 600*time.Millisecond)
 		if err == nil {
 			_ = conn.Close()
-			latency := int(time.Since(startedAt).Milliseconds())
-			if latency == 0 {
-				return 1
-			}
-			return latency
+			return int(time.Since(startedAt).Milliseconds())
 		}
 	}
 
@@ -1065,23 +1125,19 @@ func measureLatency(cfg config.AppConfig) int {
 		return 0
 	}
 
-	latency := int(time.Since(startedAt).Milliseconds())
-	if latency == 0 {
-		return 1
-	}
-	return latency
+	return int(time.Since(startedAt).Milliseconds())
 }
 
 func dialDiagnosticTarget(cfg config.AppConfig, address string) (net.Conn, error) {
 	if cfg.TUNEnabled {
-		return net.DialTimeout("tcp", address, 2*time.Second)
+		return net.DialTimeout("tcp", address, 600*time.Millisecond)
 	}
 
 	dialer, err := proxy.SOCKS5(
 		"tcp",
-		"127.0.0.1:10808",
+		localMixedInboundAddr,
 		nil,
-		&net.Dialer{Timeout: 2 * time.Second},
+		&net.Dialer{Timeout: 600 * time.Millisecond},
 	)
 	if err != nil {
 		return nil, err
@@ -1091,29 +1147,70 @@ func dialDiagnosticTarget(cfg config.AppConfig, address string) (net.Conn, error
 }
 
 func lookupExternalIP(cfg config.AppConfig) (string, error) {
+	if cfg.TUNEnabled {
+		return lookupExternalIPDirect()
+	}
+	// Proxy mode: only via local mixed inbound so the address matches the tunnel exit.
+	return lookupExternalIPViaLocalMixedInbound()
+}
+
+func lookupExternalIPViaLocalMixedInbound() (string, error) {
 	request, err := http.NewRequest(http.MethodGet, "https://api4.ipify.org?format=json", nil)
 	if err != nil {
 		return "", err
 	}
 
-	client := &http.Client{Timeout: 4 * time.Second}
-	if !cfg.TUNEnabled {
-		dialer, err := proxy.SOCKS5(
-			"tcp",
-			"127.0.0.1:10808",
-			nil,
-			&net.Dialer{Timeout: 3 * time.Second},
-		)
-		if err != nil {
-			return "", err
-		}
-		client.Transport = &http.Transport{
+	dialer, err := proxy.SOCKS5(
+		"tcp",
+		localMixedInboundAddr,
+		nil,
+		&net.Dialer{Timeout: 2 * time.Second},
+	)
+	if err != nil {
+		return "", err
+	}
+
+	client := &http.Client{
+		Timeout: 2 * time.Second,
+		Transport: &http.Transport{
 			DialContext: func(_ context.Context, network, addr string) (net.Conn, error) {
 				return dialer.Dial(network, addr)
 			},
-		}
+		},
 	}
 
+	response, err := client.Do(request)
+	if err != nil {
+		return "", err
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode >= http.StatusBadRequest {
+		return "", fmt.Errorf("ip lookup failed: %s", response.Status)
+	}
+
+	var payload struct {
+		IP string `json:"ip"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(payload.IP), nil
+}
+
+// lookupExternalIPDirect bypasses local mixed inbound (used when TUN is on or as fallback).
+func lookupExternalIPDirect() (string, error) {
+	request, err := http.NewRequest(http.MethodGet, "https://api4.ipify.org?format=json", nil)
+	if err != nil {
+		return "", err
+	}
+	client := &http.Client{
+		Timeout: 4 * time.Second,
+		Transport: &http.Transport{
+			Proxy:       func(*http.Request) (*url.URL, error) { return nil, nil },
+			DialContext: (&net.Dialer{Timeout: 3 * time.Second}).DialContext,
+		},
+	}
 	response, err := client.Do(request)
 	if err != nil {
 		return "", err

@@ -9,9 +9,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
-	"time"
 
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
@@ -249,41 +249,130 @@ $route | ConvertTo-Json -Compress
 	return &route, nil
 }
 
+// buildPrepareTUNScript waits for the wintun adapter (Get-NetAdapter — same view as New-NetRoute)
+// and applies IP/DNS/metric/routes in one PowerShell process so we pay powershell.exe startup once.
+func buildPrepareTUNScript(opts TUNOptions) string {
+	alias := escapeSingleQuotes(opts.InterfaceAlias)
+	var b strings.Builder
+
+	fmt.Fprintf(&b, `
+$AdapterName = '%s'
+$deadline = (Get-Date).AddSeconds(12)
+$adapter = $null
+while ((Get-Date) -lt $deadline) {
+  $adapter = Get-NetAdapter -IncludeHidden -Name $AdapterName -ErrorAction SilentlyContinue | Select-Object -First 1
+  if ($null -ne $adapter -and $adapter.ifIndex -gt 0) { break }
+  Start-Sleep -Milliseconds 20
+}
+if ($null -eq $adapter -or $adapter.ifIndex -le 0) { exit 2 }
+`, alias)
+
+	fmt.Fprintf(&b, `
+$existing = Get-NetIPAddress -InterfaceAlias $AdapterName -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+  Where-Object { $_.IPAddress -eq '%s' }
+if ($null -eq $existing) {
+  New-NetIPAddress -InterfaceAlias $AdapterName -IPAddress '%s' -PrefixLength %d -Type Unicast -PolicyStore ActiveStore | Out-Null
+}
+`, opts.IPAddress, opts.IPAddress, opts.PrefixLength)
+
+	quotedServers := make([]string, 0, len(opts.DNSServers))
+	for _, server := range opts.DNSServers {
+		quotedServers = append(quotedServers, fmt.Sprintf("'%s'", escapeSingleQuotes(server)))
+	}
+	fmt.Fprintf(&b,
+		"Set-DnsClientServerAddress -InterfaceAlias $AdapterName -ServerAddresses @(%s)\n",
+		strings.Join(quotedServers, ", "),
+	)
+
+	fmt.Fprintf(&b,
+		"Set-NetIPInterface -InterfaceAlias $AdapterName -AutomaticMetric Disabled -InterfaceMetric 1\n",
+	)
+
+	if opts.ManageRoutes && opts.DefaultRoute != nil && len(opts.BypassCIDRs) > 0 &&
+		opts.DefaultRoute.InterfaceIndex != 0 && opts.DefaultRoute.NextHop != "" {
+		fmt.Fprintf(&b, "$ifIndex = %d\n", opts.DefaultRoute.InterfaceIndex)
+		fmt.Fprintf(&b, "$nextHop = '%s'\n", escapeSingleQuotes(opts.DefaultRoute.NextHop))
+		b.WriteString("$bypassPrefixes = @(")
+		for i, prefix := range opts.BypassCIDRs {
+			if i > 0 {
+				b.WriteString(", ")
+			}
+			b.WriteString("'")
+			b.WriteString(escapeSingleQuotes(prefix))
+			b.WriteString("'")
+		}
+		b.WriteString(")\n")
+		b.WriteString(`
+foreach ($prefix in $bypassPrefixes) {
+  $existing = Get-NetRoute -DestinationPrefix $prefix -ErrorAction SilentlyContinue | Where-Object { $_.ifIndex -eq $ifIndex -and $_.NextHop -eq $nextHop }
+  if ($null -eq $existing) {
+    New-NetRoute -DestinationPrefix $prefix -InterfaceIndex $ifIndex -NextHop $nextHop -RouteMetric 1 -PolicyStore ActiveStore | Out-Null
+  }
+}
+`)
+	}
+
+	if opts.ManageRoutes {
+		b.WriteString(`
+$splitPrefixes = @('0.0.0.0/1', '128.0.0.0/1')
+foreach ($prefix in $splitPrefixes) {
+  $existing = Get-NetRoute -InterfaceAlias $AdapterName -DestinationPrefix $prefix -ErrorAction SilentlyContinue
+  if ($null -eq $existing) {
+    New-NetRoute -InterfaceAlias $AdapterName -DestinationPrefix $prefix -NextHop '0.0.0.0' -RouteMetric 1 -PolicyStore ActiveStore | Out-Null
+  }
+}
+`)
+	}
+
+	b.WriteString("Write-Output $adapter.ifIndex\n")
+	return b.String()
+}
+
+func runPowerShellOutput(script string) ([]byte, error) {
+	command := exec.Command("powershell", "-NoProfile", "-Command", script)
+	command.SysProcAttr = hiddenPowerShellAttributes()
+	return command.Output()
+}
+
 func PrepareTUN(opts TUNOptions) (*TUNState, error) {
 	if opts.InterfaceAlias == "" {
 		return nil, errors.New("tun interface alias is required")
 	}
 
-	index, err := waitForAdapterIndex(opts.InterfaceAlias, 12*time.Second)
+	out, err := runPowerShellOutput(buildPrepareTUNScript(opts))
 	if err != nil {
-		return nil, fmt.Errorf("waitForAdapterIndex: %w", err)
+		return nil, fmt.Errorf("prepare TUN (wait + configure): %w", err)
+	}
+	rawOut := strings.TrimSpace(strings.ReplaceAll(string(out), "\r\n", "\n"))
+	if rawOut == "" {
+		return nil, errors.New("prepare TUN: empty output")
+	}
+	var idx int
+	lines := strings.Split(rawOut, "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := strings.TrimSpace(strings.TrimRight(lines[i], "\r"))
+		if line == "" {
+			continue
+		}
+		if v, err := strconv.Atoi(line); err == nil && v > 0 {
+			idx = v
+			break
+		}
+	}
+	if idx <= 0 {
+		return nil, fmt.Errorf("prepare TUN: invalid ifIndex in output %q", rawOut)
 	}
 
-	if err := ensureTUNAddress(opts); err != nil {
-		return nil, fmt.Errorf("ensureTUNAddress: %w", err)
-	}
-	if err := setTUNDNS(opts); err != nil {
-		return nil, fmt.Errorf("setTUNDNS: %w", err)
-	}
-	if err := setTUNMetric(opts.InterfaceAlias); err != nil {
-		return nil, fmt.Errorf("setTUNMetric: %w", err)
-	}
 	routePrefixes := []string{}
 	bypassCIDRs := []string{}
 	if opts.ManageRoutes {
-		if err := ensureBypassRoutes(opts); err != nil {
-			return nil, fmt.Errorf("ensureBypassRoutes: %w", err)
-		}
 		bypassCIDRs = append(bypassCIDRs, opts.BypassCIDRs...)
-		if err := ensureSplitDefaultRoutes(opts.InterfaceAlias); err != nil {
-			return nil, fmt.Errorf("ensureSplitDefaultRoutes: %w", err)
-		}
 		routePrefixes = []string{"0.0.0.0/1", "128.0.0.0/1"}
 	}
 
 	return &TUNState{
 		InterfaceAlias: opts.InterfaceAlias,
-		InterfaceIndex: index,
+		InterfaceIndex: idx,
 		IPAddress:      opts.IPAddress,
 		PrefixLength:   opts.PrefixLength,
 		DNSServers:     append([]string(nil), opts.DNSServers...),
@@ -367,77 +456,6 @@ func runPowerShell(script string) error {
 	return nil
 }
 
-func waitForAdapterIndex(alias string, timeout time.Duration) (int, error) {
-	timeoutSeconds := int(timeout / time.Second)
-	if timeoutSeconds <= 0 {
-		timeoutSeconds = 1
-	}
-
-	script := fmt.Sprintf(`
-$deadline = (Get-Date).AddSeconds(%d)
-while ((Get-Date) -lt $deadline) {
-  $adapter = Get-NetAdapter -IncludeHidden -Name '%s' -ErrorAction SilentlyContinue | Select-Object -First 1 ifIndex
-  if ($null -ne $adapter -and $adapter.ifIndex -gt 0) {
-    $adapter | ConvertTo-Json -Compress
-    exit 0
-  }
-  Start-Sleep -Milliseconds 150
-}
-exit 2
-`, timeoutSeconds, escapeSingleQuotes(alias))
-
-	output, err := runPowerShellJSON(script)
-	if err != nil {
-		return 0, fmt.Errorf("timed out waiting for TUN adapter %q", alias)
-	}
-
-	var payload struct {
-		InterfaceIndex int `json:"ifIndex"`
-	}
-	if err := json.Unmarshal(output, &payload); err != nil {
-		return 0, err
-	}
-	if payload.InterfaceIndex <= 0 {
-		return 0, fmt.Errorf("timed out waiting for TUN adapter %q", alias)
-	}
-
-	return payload.InterfaceIndex, nil
-}
-
-func getAdapterIndex(alias string) (int, error) {
-	script := fmt.Sprintf(`
-$adapter = Get-NetAdapter -IncludeHidden -Name '%s' -ErrorAction SilentlyContinue | Select-Object -First 1 ifIndex
-if ($null -eq $adapter) { exit 2 }
-$adapter | ConvertTo-Json -Compress
-`, escapeSingleQuotes(alias))
-
-	output, err := runPowerShellJSON(script)
-	if err != nil {
-		return 0, err
-	}
-
-	var payload struct {
-		InterfaceIndex int `json:"ifIndex"`
-	}
-	if err := json.Unmarshal(output, &payload); err != nil {
-		return 0, err
-	}
-
-	return payload.InterfaceIndex, nil
-}
-
-func ensureTUNAddress(opts TUNOptions) error {
-	script := fmt.Sprintf(`
-$existing = Get-NetIPAddress -InterfaceAlias '%s' -AddressFamily IPv4 -ErrorAction SilentlyContinue |
-  Where-Object { $_.IPAddress -eq '%s' }
-if ($null -eq $existing) {
-  New-NetIPAddress -InterfaceAlias '%s' -IPAddress '%s' -PrefixLength %d -Type Unicast -PolicyStore ActiveStore | Out-Null
-}
-`, escapeSingleQuotes(opts.InterfaceAlias), opts.IPAddress, escapeSingleQuotes(opts.InterfaceAlias), opts.IPAddress, opts.PrefixLength)
-
-	return runPowerShell(script)
-}
-
 func removeTUNAddress(alias, ipAddress string) error {
 	script := fmt.Sprintf(`
 $existing = Get-NetIPAddress -InterfaceAlias '%s' -AddressFamily IPv4 -ErrorAction SilentlyContinue |
@@ -450,33 +468,9 @@ if ($null -ne $existing) {
 	return runPowerShell(script)
 }
 
-func setTUNDNS(opts TUNOptions) error {
-	quotedServers := make([]string, 0, len(opts.DNSServers))
-	for _, server := range opts.DNSServers {
-		quotedServers = append(quotedServers, fmt.Sprintf("'%s'", escapeSingleQuotes(server)))
-	}
-
-	script := fmt.Sprintf(
-		"Set-DnsClientServerAddress -InterfaceAlias '%s' -ServerAddresses @(%s)",
-		escapeSingleQuotes(opts.InterfaceAlias),
-		strings.Join(quotedServers, ", "),
-	)
-
-	return runPowerShell(script)
-}
-
 func resetTUNDNS(alias string) error {
 	script := fmt.Sprintf(
 		"Set-DnsClientServerAddress -InterfaceAlias '%s' -ResetServerAddresses",
-		escapeSingleQuotes(alias),
-	)
-
-	return runPowerShell(script)
-}
-
-func setTUNMetric(alias string) error {
-	script := fmt.Sprintf(
-		"Set-NetIPInterface -InterfaceAlias '%s' -AutomaticMetric Disabled -InterfaceMetric 1",
 		escapeSingleQuotes(alias),
 	)
 
@@ -492,42 +486,6 @@ func resetTUNMetric(alias string) error {
 	return runPowerShell(script)
 }
 
-func ensureSplitDefaultRoutes(alias string) error {
-	for _, prefix := range []string{"0.0.0.0/1", "128.0.0.0/1"} {
-		if err := ensureNetRoute(alias, prefix); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func ensureBypassRoutes(opts TUNOptions) error {
-	if opts.DefaultRoute == nil {
-		return errors.New("default route is required for managed TUN routes")
-	}
-	if opts.DefaultRoute.InterfaceIndex == 0 || opts.DefaultRoute.NextHop == "" {
-		return errors.New("default route is missing interface index or next hop")
-	}
-
-	for _, prefix := range opts.BypassCIDRs {
-		if err := ensureGatewayRoute(prefix, opts.DefaultRoute); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func ensureNetRoute(alias, prefix string) error {
-	script := fmt.Sprintf(`
-$existing = Get-NetRoute -InterfaceAlias '%s' -DestinationPrefix '%s' -ErrorAction SilentlyContinue
-if ($null -eq $existing) {
-  New-NetRoute -InterfaceAlias '%s' -DestinationPrefix '%s' -NextHop '0.0.0.0' -RouteMetric 1 -PolicyStore ActiveStore | Out-Null
-}
-`, escapeSingleQuotes(alias), prefix, escapeSingleQuotes(alias), prefix)
-
-	return runPowerShell(script)
-}
-
 func removeNetRoute(alias, prefix string) error {
 	script := fmt.Sprintf(`
 $existing = Get-NetRoute -InterfaceAlias '%s' -DestinationPrefix '%s' -ErrorAction SilentlyContinue
@@ -535,18 +493,6 @@ if ($null -ne $existing) {
   $existing | Remove-NetRoute -Confirm:$false
 }
 `, escapeSingleQuotes(alias), prefix)
-
-	return runPowerShell(script)
-}
-
-func ensureGatewayRoute(prefix string, route *DefaultRoute) error {
-	script := fmt.Sprintf(`
-$existing = Get-NetRoute -DestinationPrefix '%s' -ErrorAction SilentlyContinue |
-  Where-Object { $_.ifIndex -eq %d -and $_.NextHop -eq '%s' }
-if ($null -eq $existing) {
-  New-NetRoute -DestinationPrefix '%s' -InterfaceIndex %d -NextHop '%s' -RouteMetric 1 -PolicyStore ActiveStore | Out-Null
-}
-`, prefix, route.InterfaceIndex, escapeSingleQuotes(route.NextHop), prefix, route.InterfaceIndex, escapeSingleQuotes(route.NextHop))
 
 	return runPowerShell(script)
 }

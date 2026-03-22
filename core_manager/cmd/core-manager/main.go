@@ -33,10 +33,23 @@ func main() {
 			runtime.BeginRussiaRoutingAssetsWarmup()
 		}
 	}()
-	handler := api.NewServer(store, runtime)
 
-	server := &http.Server{
-		Addr:              "127.0.0.1:8080",
+	var httpServer *http.Server
+	handler := api.NewServer(store, runtime, func() {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			if httpServer != nil {
+				if err := httpServer.Shutdown(ctx); err != nil {
+					log.Printf("http shutdown after API request failed: %v", err)
+				}
+			}
+		}()
+	})
+
+	httpServer = &http.Server{
+		// Avoid clashing with common dev servers / proxy auto-config on 8080.
+		Addr:              "127.0.0.1:29452",
 		Handler:           handler.Routes(),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
@@ -52,14 +65,14 @@ func main() {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
-		if err := server.Shutdown(ctx); err != nil {
+		if err := httpServer.Shutdown(ctx); err != nil {
 			log.Printf("http shutdown failed: %v", err)
 		}
 	}()
 
-	log.Printf("core-manager listening on http://%s", server.Addr)
+	log.Printf("core-manager listening on http://%s", httpServer.Addr)
 
-	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+	if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatal(err)
 	}
 }

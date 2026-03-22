@@ -16,10 +16,13 @@ import (
 type Server struct {
 	store   *config.Store
 	runtime *xruntime.Manager
+	// onShutdownRequested is called after a successful /api/v1/shutdown so the
+	// HTTP server can Stop() and the process can exit (see cmd/core-manager).
+	onShutdownRequested func()
 }
 
-func NewServer(store *config.Store, runtime *xruntime.Manager) *Server {
-	return &Server{store: store, runtime: runtime}
+func NewServer(store *config.Store, runtime *xruntime.Manager, onShutdownRequested func()) *Server {
+	return &Server{store: store, runtime: runtime, onShutdownRequested: onShutdownRequested}
 }
 
 func (s *Server) Routes() http.Handler {
@@ -118,6 +121,9 @@ func (s *Server) handleShutdown(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok": true,
 	})
+	if s.onShutdownRequested != nil {
+		s.onShutdownRequested()
+	}
 }
 
 func (s *Server) handleGetXrayConfig(w http.ResponseWriter, _ *http.Request) {

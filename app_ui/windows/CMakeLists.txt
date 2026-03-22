@@ -96,12 +96,28 @@ install(FILES "${FLUTTER_ICU_DATA_FILE}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}
 install(FILES "${FLUTTER_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
   COMPONENT Runtime)
 
-install(FILES
-  "${CORE_MANAGER_BINARY}"
-  "${XRAY_BINARY}"
-  "${WINTUN_BINARY}"
-  DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
-  COMPONENT Runtime)
+# CMake's file(INSTALL) often hits "Permission denied" overwriting locked EXEs/DLLs.
+# Use taskkill + delete + cmake -E copy into the same prefix as the app binary.
+if(WIN32)
+  install(CODE "
+    execute_process(COMMAND \"\$ENV{SYSTEMROOT}/System32/taskkill.exe\" /F /IM \"${BINARY_NAME}.exe\" /T ERROR_QUIET OUTPUT_QUIET)
+    execute_process(COMMAND \"\$ENV{SYSTEMROOT}/System32/taskkill.exe\" /F /IM core-manager.exe /T ERROR_QUIET OUTPUT_QUIET)
+    execute_process(COMMAND \"\$ENV{SYSTEMROOT}/System32/taskkill.exe\" /F /IM xray.exe /T ERROR_QUIET OUTPUT_QUIET)
+    execute_process(COMMAND \"${CMAKE_COMMAND}\" -E remove -f \"\${CMAKE_INSTALL_PREFIX}/core-manager.exe\")
+    execute_process(COMMAND \"${CMAKE_COMMAND}\" -E remove -f \"\${CMAKE_INSTALL_PREFIX}/xray.exe\")
+    execute_process(COMMAND \"${CMAKE_COMMAND}\" -E remove -f \"\${CMAKE_INSTALL_PREFIX}/wintun.dll\")
+    execute_process(COMMAND \"${CMAKE_COMMAND}\" -E copy \"${CORE_MANAGER_BINARY}\" \"\${CMAKE_INSTALL_PREFIX}/core-manager.exe\")
+    execute_process(COMMAND \"${CMAKE_COMMAND}\" -E copy \"${XRAY_BINARY}\" \"\${CMAKE_INSTALL_PREFIX}/xray.exe\")
+    execute_process(COMMAND \"${CMAKE_COMMAND}\" -E copy \"${WINTUN_BINARY}\" \"\${CMAKE_INSTALL_PREFIX}/wintun.dll\")
+  " COMPONENT Runtime)
+else()
+  install(FILES
+    "${CORE_MANAGER_BINARY}"
+    "${XRAY_BINARY}"
+    "${WINTUN_BINARY}"
+    DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+    COMPONENT Runtime)
+endif()
 
 if(PLUGIN_BUNDLED_LIBRARIES)
   install(FILES "${PLUGIN_BUNDLED_LIBRARIES}"

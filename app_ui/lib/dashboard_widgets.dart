@@ -161,12 +161,14 @@ class _Sidebar extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _SidebarTrafficRow(
+                  label: loc(language, 'Traffic sent'),
                   icon: Icons.arrow_upward_rounded,
                   iconColor: const Color(0xFF6CEB86),
                   value: _formatRate(uploadBps),
                 ),
                 const SizedBox(height: 8),
                 _SidebarTrafficRow(
+                  label: loc(language, 'Traffic received'),
                   icon: Icons.arrow_downward_rounded,
                   iconColor: const Color(0xFFFF9E8B),
                   value: _formatRate(downloadBps),
@@ -1228,6 +1230,7 @@ class _ProfileExportRow extends StatelessWidget {
         ? profile.rawLink
         : const JsonEncoder.withIndent('  ')
             .convert(_serverProfileToJson(profile));
+    final previewDisplay = _maskProfileExportPreview(preview);
 
     return Container(
       width: double.infinity,
@@ -1282,7 +1285,7 @@ class _ProfileExportRow extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           SelectableText(
-            preview,
+            previewDisplay,
             maxLines: 3,
             style: TextStyle(
               color: AppPalette.homeTextMuted.withValues(alpha: 0.84),
@@ -2357,6 +2360,7 @@ class _RulesModeCard extends StatelessWidget {
             children: [
               _ProfileChoiceChip(
                 label: tr('Global'),
+                subtitle: loc(language, 'Global profile no update hint'),
                 selected: rulesProfile == RulesProfile.global,
                 onTap: () => onProfileChanged(RulesProfile.global),
               ),
@@ -2366,7 +2370,7 @@ class _RulesModeCard extends StatelessWidget {
                     ? loc(language, 'Russia rules download failed hint')
                     : (russiaRulesUpdatedAt.isNotEmpty
                         ? '${loc(language, 'Rules DB updated')}: ${_formatRussiaRulesUpdatedAt(russiaRulesUpdatedAt)}'
-                        : null),
+                        : loc(language, 'Russia profile needs update hint')),
                 attention: russiaRulesFailed,
                 selected: rulesProfile == RulesProfile.russia,
                 onTap: () => onProfileChanged(RulesProfile.russia),
@@ -5301,11 +5305,13 @@ class _LanguageSwitcher extends StatelessWidget {
 
 class _SidebarTrafficRow extends StatelessWidget {
   const _SidebarTrafficRow({
+    required this.label,
     required this.icon,
     required this.iconColor,
     required this.value,
   });
 
+  final String label;
   final IconData icon;
   final Color iconColor;
   final String value;
@@ -5318,18 +5324,55 @@ class _SidebarTrafficRow extends StatelessWidget {
         const SizedBox(width: 10),
         Expanded(
           child: Text(
-            value,
-            textAlign: TextAlign.right,
+            label,
             style: TextStyle(
-              fontSize: 14,
+              fontSize: 12,
               fontWeight: FontWeight.w500,
-              color: AppPalette.homeText.withValues(alpha: 0.92),
+              color: AppPalette.homeTextMuted.withValues(alpha: 0.82),
             ),
+          ),
+        ),
+        Text(
+          value,
+          textAlign: TextAlign.right,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: AppPalette.homeText.withValues(alpha: 0.92),
           ),
         ),
       ],
     );
   }
+}
+
+/// Obscures the middle of share links / JSON for on-screen preview only (clipboard stays full).
+String _maskProfileExportPreview(String raw) {
+  final s = raw.trim();
+  if (s.isEmpty) {
+    return s;
+  }
+  final schemeIdx = s.indexOf('://');
+  if (schemeIdx >= 0) {
+    final head = s.substring(0, schemeIdx + 3);
+    final rest = s.substring(schemeIdx + 3);
+    if (rest.length <= 12) {
+      return '$head${'*' * rest.length}';
+    }
+    final keepStart = rest.length >= 24 ? 10 : 4;
+    const keepEnd = 4;
+    final starLen = rest.length - keepStart - keepEnd;
+    if (starLen <= 0) {
+      return '$head${'*' * (rest.length > 8 ? 8 : rest.length)}';
+    }
+    return '$head${rest.substring(0, keepStart)}'
+        '${'*' * starLen.clamp(4, 32)}'
+        '${rest.substring(rest.length - keepEnd)}';
+  }
+  if (s.length <= 28) {
+    return s;
+  }
+  return '${s.substring(0, 12)}${'*' * 12}${s.substring(s.length - 8)}';
 }
 
 String _formatRate(int bytesPerSecond) {

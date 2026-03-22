@@ -1,3 +1,6 @@
+#include <cstdlib>
+#include <string>
+
 #include <flutter/dart_project.h>
 #include <flutter/flutter_view_controller.h>
 #include <windows.h>
@@ -36,6 +39,16 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   while (::GetMessage(&msg, nullptr, 0, 0)) {
     ::TranslateMessage(&msg);
     ::DispatchMessage(&msg);
+  }
+
+  // If Dart did not shut down the bundled processes, avoid leaving them running.
+  char sysdir[MAX_PATH];
+  if (GetSystemDirectoryA(sysdir, MAX_PATH) > 0) {
+    std::string tk = std::string(sysdir) + "\\taskkill.exe";
+    std::string a = "\"" + tk + "\" /F /IM core-manager.exe /T >nul 2>&1";
+    std::string b = "\"" + tk + "\" /F /IM xray.exe /T >nul 2>&1";
+    std::system(a.c_str());
+    std::system(b.c_str());
   }
 
   ::CoUninitialize();

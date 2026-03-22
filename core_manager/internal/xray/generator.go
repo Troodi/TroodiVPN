@@ -87,6 +87,19 @@ func BuildWithOptions(cfg config.AppConfig, opts BuildOptions) Config {
 			"domainStrategy": domainStrategy(cfg),
 			"rules":          rules,
 		},
+		"api": map[string]any{
+			"tag":      "api",
+			"listen":   LocalLoopbackStatsAPI,
+			"services": []string{"StatsService"},
+		},
+		"policy": map[string]any{
+			"system": map[string]any{
+				"statsInboundUplink":    true,
+				"statsInboundDownlink":  true,
+				"statsOutboundUplink":   true,
+				"statsOutboundDownlink": true,
+			},
+		},
 	}
 }
 

@@ -1,8 +1,12 @@
 part of 'main.dart';
 
+/// Local HTTP API for core-manager (avoid 8080 — common dev/proxy conflicts).
+const int kBackendPort = 29452;
+const String kBackendBaseUrl = 'http://127.0.0.1:$kBackendPort';
+
 class BackendClient {
   const BackendClient({
-    this.baseUrl = 'http://127.0.0.1:8080',
+    this.baseUrl = kBackendBaseUrl,
   });
 
   final String baseUrl;
@@ -115,6 +119,7 @@ class BackendRuntime {
   Process? _process;
   bool _launchedByApp = false;
   bool _starting = false;
+  bool _disposed = false;
 
   Future<void> ensureRunning() async {
     if (await _isReachable()) {
@@ -155,6 +160,10 @@ class BackendRuntime {
   }
 
   Future<void> dispose() async {
+    if (_disposed) {
+      return;
+    }
+    _disposed = true;
     if (_launchedByApp && _process != null) {
       try {
         if (await _isReachable()) {
@@ -166,13 +175,21 @@ class BackendRuntime {
 
       try {
         final exitCode = _process!.exitCode;
-        await exitCode.timeout(const Duration(seconds: 3));
+        await exitCode.timeout(const Duration(seconds: 2));
       } catch (_) {
         _process!.kill();
       } finally {
         _process = null;
         _launchedByApp = false;
       }
+    }
+    if (Platform.isWindows) {
+      try {
+        Process.runSync('taskkill', ['/F', '/IM', 'core-manager.exe', '/T'],
+            runInShell: true);
+        Process.runSync('taskkill', ['/F', '/IM', 'xray.exe', '/T'],
+            runInShell: true);
+      } catch (_) {}
     }
   }
 
@@ -190,9 +207,9 @@ class BackendRuntime {
       if (await _isReachable()) {
         return;
       }
-      await Future<void>.delayed(const Duration(milliseconds: 350));
+      await Future<void>.delayed(const Duration(milliseconds: 120));
     }
-    throw Exception('Backend did not start on http://127.0.0.1:8080');
+    throw Exception('Backend did not start on $kBackendBaseUrl');
   }
 
   Future<File?> _findBackendExecutable() async {

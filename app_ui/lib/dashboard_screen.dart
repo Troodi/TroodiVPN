@@ -7,7 +7,8 @@ class DashboardScreen extends StatefulWidget {
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen> {
+class _DashboardScreenState extends State<DashboardScreen>
+    with WidgetsBindingObserver {
   final BackendClient backend = const BackendClient();
   late final BackendRuntime backendRuntime;
   Timer? pollTimer;
@@ -57,6 +58,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     backendRuntime = BackendRuntime(backend);
     proxyController = TextEditingController();
     directController = TextEditingController();
@@ -76,7 +78,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.detached) {
+      unawaited(backendRuntime.dispose());
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     pollTimer?.cancel();
     unawaited(backendRuntime.dispose());
     proxyController.dispose();
@@ -591,15 +601,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
       return;
     }
 
+    final wasConnected = connection == ConnectionStateValue.connected;
+
     setState(() {
       isSwitchingTunnelMode = true;
     });
 
     try {
       if (mode == TunnelMode.vpn) {
-        final elevated = await _ensureAdminForTun();
-        if (!elevated) {
-          return;
+        if (wasConnected) {
+          final elevated = await _ensureAdminForTun();
+          if (!elevated) {
+            return;
+          }
         }
         await _saveConfig(
           _currentConfig().copyWith(
@@ -607,19 +621,67 @@ class _DashboardScreenState extends State<DashboardScreen> {
             systemProxyEnabled: false,
           ),
         );
-        return;
+      } else {
+        await _saveConfig(
+          _currentConfig().copyWith(
+            tunEnabled: false,
+            systemProxyEnabled: true,
+          ),
+        );
       }
 
-      await _saveConfig(
-        _currentConfig().copyWith(
-          tunEnabled: false,
-          systemProxyEnabled: true,
-        ),
-      );
+      if (!mounted) {
+        return;
+      }
+      if (wasConnected &&
+          connection == ConnectionStateValue.disconnected) {
+        await _reconnectAfterTunnelModeChange();
+      }
     } finally {
       if (mounted) {
         setState(() {
           isSwitchingTunnelMode = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _reconnectAfterTunnelModeChange() async {
+    setState(() {
+      isBusy = true;
+      isConnecting = true;
+      errorMessage = null;
+    });
+    try {
+      final ready = await _ensureBackendReady();
+      if (!ready) {
+        return;
+      }
+      final snapshot = await backend.connect();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _applySnapshot(snapshot);
+      });
+    } on TimeoutException {
+      if (mounted) {
+        _showMessage(
+          tr('Connection is taking too long. Check Logs. If Xray starts, the status will update automatically.'),
+          isError: true,
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        _showMessage(error.toString(), isError: true);
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          isBusy = false;
+          if (connection == ConnectionStateValue.disconnected) {
+            isConnecting = false;
+          }
         });
       }
     }

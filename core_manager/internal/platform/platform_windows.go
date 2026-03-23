@@ -23,6 +23,25 @@ type ProxySettings struct {
 	Enabled  bool
 	Server   string
 	Override string
+
+	// Keep parity with non-Windows proxy capture fields so shared runtime
+	// code can compile on all platforms.
+	ModeRaw             string
+	AutoconfigURLRaw    string
+	IgnoreHostsRaw      string
+	UseSameProxyRaw     string
+	FTPHostRaw          string
+	FTPPortRaw          string
+	HTTPEnabledRaw      string
+	HTTPHostRaw         string
+	HTTPPortRaw         string
+	HTTPUseAuthRaw      string
+	HTTPAuthUserRaw     string
+	HTTPAuthPasswordRaw string
+	HTTPSHostRaw        string
+	HTTPSPortRaw        string
+	SocksHostRaw        string
+	SocksPortRaw        string
 }
 
 type DefaultRoute struct {
@@ -126,11 +145,102 @@ func CaptureSystemProxy() (*ProxySettings, error) {
 		override = ""
 	}
 
+	httpHost, httpPort := extractWindowsProxyEndpoint(server, []string{"http"})
+	if httpHost == "" || httpPort == "" {
+		httpHost, httpPort = extractWindowsProxyEndpoint(server, nil)
+	}
+	socksHost, socksPort := extractWindowsProxyEndpoint(server, []string{"socks", "socks5"})
+
+	modeRaw := "none"
+	httpEnabledRaw := "false"
+	if enable != 0 {
+		modeRaw = "manual"
+		httpEnabledRaw = "true"
+	}
+
 	return &ProxySettings{
 		Enabled:  enable != 0,
 		Server:   server,
 		Override: override,
+		ModeRaw:  modeRaw,
+
+		HTTPEnabledRaw: httpEnabledRaw,
+		HTTPHostRaw:    httpHost,
+		HTTPPortRaw:    httpPort,
+		HTTPSHostRaw:   httpHost,
+		HTTPSPortRaw:   httpPort,
+		SocksHostRaw:   socksHost,
+		SocksPortRaw:   socksPort,
 	}, nil
+}
+
+func extractWindowsProxyEndpoint(proxyServer string, schemes []string) (string, string) {
+	s := strings.TrimSpace(proxyServer)
+	if s == "" {
+		return "", ""
+	}
+
+	// Single endpoint format: "host:port"
+	if !strings.Contains(s, "=") && !strings.Contains(s, ";") {
+		host, port := splitHostPort(s)
+		return host, port
+	}
+
+	allowed := map[string]struct{}{}
+	for _, scheme := range schemes {
+		allowed[strings.ToLower(strings.TrimSpace(scheme))] = struct{}{}
+	}
+
+	parts := strings.Split(s, ";")
+	for _, part := range parts {
+		item := strings.TrimSpace(part)
+		if item == "" {
+			continue
+		}
+		name, value, found := strings.Cut(item, "=")
+		if !found {
+			continue
+		}
+		name = strings.ToLower(strings.TrimSpace(name))
+		value = strings.TrimSpace(value)
+		if len(allowed) > 0 {
+			if _, ok := allowed[name]; !ok {
+				continue
+			}
+		}
+		host, port := splitHostPort(value)
+		if host != "" && port != "" {
+			return host, port
+		}
+	}
+
+	return "", ""
+}
+
+func splitHostPort(endpoint string) (string, string) {
+	value := strings.TrimSpace(endpoint)
+	if value == "" {
+		return "", ""
+	}
+	value = strings.TrimPrefix(value, "http://")
+	value = strings.TrimPrefix(value, "https://")
+	value = strings.TrimPrefix(value, "socks://")
+	value = strings.TrimPrefix(value, "socks5://")
+	host, port, err := net.SplitHostPort(value)
+	if err == nil {
+		return host, port
+	}
+
+	lastColon := strings.LastIndex(value, ":")
+	if lastColon <= 0 || lastColon >= len(value)-1 {
+		return "", ""
+	}
+	host = strings.TrimSpace(value[:lastColon])
+	port = strings.TrimSpace(value[lastColon+1:])
+	if host == "" || port == "" {
+		return "", ""
+	}
+	return host, port
 }
 
 func ApplySystemProxy(address string) (*ProxySettings, error) {

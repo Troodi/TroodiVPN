@@ -88,6 +88,8 @@ type Manager struct {
 	xrayBaselineAt     time.Time
 	xrayBaselineTag    string
 	ipLookupInflight   bool
+	proxyIPGraceUntil  time.Time
+	runtimeEpoch       uint64
 
 	assetsMu                 sync.Mutex
 	routingAssetsStatus      string
@@ -373,10 +375,16 @@ func (m *Manager) startLocked(cfg config.AppConfig) error {
 	m.lastWriteBytes = 0
 	m.lastMetricsAt = time.Time{}
 	m.lastIPLookupAt = time.Time{}
+	m.proxyIPGraceUntil = time.Time{}
 	if cfg.TUNEnabled {
 		m.mode = "tun"
+	} else {
+		// Give local mixed inbound/proxy route a short settle window after restart
+		// to avoid showing stale pre-switch IP during profile changes.
+		m.proxyIPGraceUntil = time.Now().Add(2500 * time.Millisecond)
 	}
 	m.appendLogLocked(fmt.Sprintf("[%s] xray started (pid %d)", time.Now().Format(time.RFC3339), cmd.Process.Pid))
+	m.runtimeEpoch++
 	if err := m.applySystemProxyLocked(cfg); err != nil {
 		m.appendLogLocked("system proxy error: " + err.Error())
 	}
@@ -467,6 +475,8 @@ func (m *Manager) stopLocked() error {
 	m.downloadBps = 0
 	m.uploadBps = 0
 	m.ready = false
+	m.proxyIPGraceUntil = time.Time{}
+	m.runtimeEpoch++
 
 	return nil
 }
@@ -826,6 +836,8 @@ func (m *Manager) waitForExit(cmd *exec.Cmd) {
 	m.downloadBps = 0
 	m.uploadBps = 0
 	m.ready = false
+	m.proxyIPGraceUntil = time.Time{}
+	m.runtimeEpoch++
 	m.running = false
 	m.cmd = nil
 }
@@ -1034,7 +1046,9 @@ func (m *Manager) refreshRuntimeMetrics(cfg config.AppConfig) {
 	m.mu.Lock()
 	running := m.running
 	mode := m.mode
-	shouldRefreshIP := m.publicIP == "" || time.Since(m.lastIPLookupAt) >= 10*time.Second
+	now := time.Now()
+	ipLookupAllowed := mode != "proxy" || m.proxyIPGraceUntil.IsZero() || !now.Before(m.proxyIPGraceUntil)
+	shouldRefreshIP := ipLookupAllowed && (m.publicIP == "" || time.Since(m.lastIPLookupAt) >= 10*time.Second)
 	currentIP := m.publicIP
 	m.mu.Unlock()
 
@@ -1049,6 +1063,7 @@ func (m *Manager) refreshRuntimeMetrics(cfg config.AppConfig) {
 		}
 		m.mu.Unlock()
 		if startLookup {
+			epoch := m.runtimeEpoch
 			go func(cfg config.AppConfig) {
 				defer func() {
 					m.mu.Lock()
@@ -1060,7 +1075,7 @@ func (m *Manager) refreshRuntimeMetrics(cfg config.AppConfig) {
 					return
 				}
 				m.mu.Lock()
-				if m.running {
+				if m.running && m.runtimeEpoch == epoch {
 					m.publicIP = ip
 					m.lastIPLookupAt = time.Now()
 				}
@@ -1069,20 +1084,16 @@ func (m *Manager) refreshRuntimeMetrics(cfg config.AppConfig) {
 		}
 	}
 
-	readBps, writeBps := m.measureProcessIO()
 	var downloadBps, uploadBps uint64
 	if running {
 		if d, u, ok := m.measureXrayInboundBps(context.Background(), mode); ok {
 			downloadBps = d
 			uploadBps = u
 		} else {
-			// Fallback: process I/O (approximate; often asymmetric on Windows).
-			if readBps > 0 && writeBps > 0 {
-				downloadBps = writeBps
-				uploadBps = readBps
-			} else if total := readBps + writeBps; total > 0 {
-				uploadBps = total / 2
-				downloadBps = total - uploadBps
+			readBps, writeBps := m.measureProcessIO()
+			if readBps > 0 || writeBps > 0 {
+				downloadBps = readBps
+				uploadBps = writeBps
 			}
 		}
 	}

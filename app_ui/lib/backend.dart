@@ -11,6 +11,7 @@ class BackendClient {
 
   final String baseUrl;
   static const Duration _stateTimeout = Duration(seconds: 10);
+  static const Duration _updateStateTimeout = Duration(seconds: 25);
   static const Duration _connectTimeout = Duration(seconds: 90);
 
   static final http.Client _client = IOClient(_createDirectHttpClient());
@@ -35,7 +36,7 @@ class BackendClient {
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode(config.toJson()),
         )
-        .timeout(_stateTimeout);
+        .timeout(_updateStateTimeout);
     return _decodeSnapshot(response, acceptServiceUnavailable: true);
   }
 

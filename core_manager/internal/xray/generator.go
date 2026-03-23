@@ -4,6 +4,13 @@ import "github.com/troodi/xray-desktop/core-manager/internal/config"
 
 type Config map[string]any
 
+var forcedProxyCheckDomains = []string{
+	"full:api4.ipify.org",
+	"full:api.ipify.org",
+	"full:ifconfig.me",
+	"full:ipinfo.io",
+}
+
 type BuildOptions struct {
 	BindInterface string
 	BindAddress   string
@@ -92,6 +99,7 @@ func BuildWithOptions(cfg config.AppConfig, opts BuildOptions) Config {
 			"listen":   LocalLoopbackStatsAPI,
 			"services": []string{"StatsService"},
 		},
+		"stats": map[string]any{},
 		"policy": map[string]any{
 			"system": map[string]any{
 				"statsInboundUplink":    true,
@@ -163,6 +171,9 @@ func appendRussiaSmartRules(rules []map[string]any, cfg config.AppConfig) []map[
 	// Keep local/private destinations outside the tunnel even when TUN or
 	// system proxy is enabled, so LAN traffic does not loop through Xray.
 	rules = appendIPRule(rules, []string{"geoip:private"}, "direct")
+
+	// Ensure runtime IP-check endpoints always go via proxy in Russia profile.
+	rules = appendDomainRule(rules, forcedProxyCheckDomains, "proxy")
 
 	if len(cfg.ProxyDomains) > 0 {
 		rules = appendDomainRule(rules, cfg.ProxyDomains, "proxy")

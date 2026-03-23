@@ -500,8 +500,8 @@ func processExists(pid int) bool {
 		return false
 	}
 	if runtime.GOOS == "windows" {
-		// tasklist exits 0 even when PID not found, so inspect output.
 		cmd := exec.Command("tasklist", "/FI", fmt.Sprintf("PID eq %d", pid))
+		cmd.SysProcAttr = hiddenProcessAttributes()
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			return false

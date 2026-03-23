@@ -148,7 +148,7 @@ class BackendRuntime {
         executable.path,
         const [],
         workingDirectory: executable.parent.path,
-        mode: ProcessStartMode.normal,
+        mode: ProcessStartMode.detachedWithStdio,
       );
       _launchedByApp = true;
       unawaited(_process!.stdout.drain<void>());
@@ -165,18 +165,16 @@ class BackendRuntime {
       return;
     }
     _disposed = true;
+
+    // 1. Graceful: tell core-manager to stop xray, restore proxy, and exit.
+    try {
+      await backend.shutdown().timeout(const Duration(seconds: 4));
+    } catch (_) {}
+
+    // 2. Wait for our child process to exit (if we spawned it).
     if (_launchedByApp && _process != null) {
       try {
-        if (await _isReachable()) {
-          await backend.shutdown();
-        }
-      } catch (_) {
-        // Fallback to process kill below if graceful shutdown is unavailable.
-      }
-
-      try {
-        final exitCode = _process!.exitCode;
-        await exitCode.timeout(const Duration(seconds: 2));
+        await _process!.exitCode.timeout(const Duration(seconds: 2));
       } catch (_) {
         _process!.kill();
       } finally {
@@ -184,14 +182,21 @@ class BackendRuntime {
         _launchedByApp = false;
       }
     }
-    if (Platform.isWindows) {
-      try {
-        Process.runSync('taskkill', ['/F', '/IM', 'core-manager.exe', '/T'],
-            runInShell: true);
-        Process.runSync('taskkill', ['/F', '/IM', 'xray.exe', '/T'],
-            runInShell: true);
-      } catch (_) {}
-    }
+
+    // 3. Force-kill any remaining orphans (no shell to avoid CMD flash).
+    try {
+      if (Platform.isWindows) {
+        Process.runSync(
+          'taskkill', ['/F', '/IM', 'core-manager.exe', '/T'],
+        );
+        Process.runSync(
+          'taskkill', ['/F', '/IM', 'xray.exe', '/T'],
+        );
+      } else {
+        Process.runSync('pkill', ['-f', 'core-manager']);
+        Process.runSync('pkill', ['-f', 'xray']);
+      }
+    } catch (_) {}
   }
 
   Future<bool> _isReachable() async {

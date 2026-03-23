@@ -483,21 +483,31 @@ class _DashboardScreenState extends State<DashboardScreen>
         _applySnapshot(snapshot);
       });
 
-      if (preserveConnection &&
-          wasConnectedBeforeChange &&
-          connection == ConnectionStateValue.disconnected) {
-        final assetsBusy = snapshot.runtime.routingAssetsStatus == 'downloading';
-        final assetsFailed = snapshot.runtime.routingAssetsStatus == 'error' &&
-            snapshot.runtime.russiaRoutingAssetsUpdatedAt.isEmpty;
-        if (assetsBusy || assetsFailed) {
-          _showMessage(
-            assetsBusy
-                ? tr('Waiting for routing rules download before reconnecting.')
-                : tr('Routing rules download failed. Retry and reconnect.'),
-            isError: assetsFailed,
-          );
-        } else {
-          await _restoreConnectionAfterConfigChange();
+      if (preserveConnection && wasConnectedBeforeChange) {
+        if (connection == ConnectionStateValue.connected &&
+            !runtimeStatus.ready) {
+          setState(() {
+            isConnecting = true;
+          });
+        } else if (connection == ConnectionStateValue.disconnected) {
+          final assetsBusy =
+              snapshot.runtime.routingAssetsStatus == 'downloading';
+          final assetsFailed =
+              snapshot.runtime.routingAssetsStatus == 'error' &&
+                  snapshot.runtime.russiaRoutingAssetsUpdatedAt.isEmpty;
+          if (assetsBusy || assetsFailed) {
+            _showMessage(
+              assetsBusy
+                  ? tr('Waiting for routing rules download before reconnecting.')
+                  : tr('Routing rules download failed. Retry and reconnect.'),
+              isError: assetsFailed,
+            );
+          } else {
+            setState(() {
+              isConnecting = true;
+            });
+            await _restoreConnectionAfterConfigChange();
+          }
         }
       }
     } on TimeoutException {
@@ -517,6 +527,9 @@ class _DashboardScreenState extends State<DashboardScreen>
       if (mounted) {
         setState(() {
           isBusy = false;
+          if (connection != ConnectionStateValue.connected) {
+            isConnecting = false;
+          }
         });
       }
     }

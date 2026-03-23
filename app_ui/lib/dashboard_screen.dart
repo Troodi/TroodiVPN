@@ -448,7 +448,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  Future<void> _saveConfig(AppConfigState config) async {
+  Future<void> _saveConfig(
+    AppConfigState config, {
+    bool preserveConnection = true,
+  }) async {
+    final wasConnectedBeforeChange =
+        connection == ConnectionStateValue.connected;
     setState(() {
       isBusy = true;
       errorMessage = null;
@@ -467,6 +472,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
       setState(() {
         _applySnapshot(snapshot);
       });
+
+      if (preserveConnection &&
+          wasConnectedBeforeChange &&
+          connection == ConnectionStateValue.disconnected) {
+        final assetsBusy = snapshot.runtime.routingAssetsStatus == 'downloading';
+        final assetsFailed = snapshot.runtime.routingAssetsStatus == 'error' &&
+            snapshot.runtime.russiaRoutingAssetsUpdatedAt.isEmpty;
+        if (assetsBusy || assetsFailed) {
+          _showMessage(
+            assetsBusy
+                ? tr('Waiting for routing rules download before reconnecting.')
+                : tr('Routing rules download failed. Retry and reconnect.'),
+            isError: assetsFailed,
+          );
+        } else {
+          await _restoreConnectionAfterConfigChange();
+        }
+      }
     } on TimeoutException {
       if (!mounted) {
         return;
@@ -486,6 +509,37 @@ class _DashboardScreenState extends State<DashboardScreen> {
           isBusy = false;
         });
       }
+    }
+  }
+
+  Future<void> _restoreConnectionAfterConfigChange() async {
+    if (!mounted || !hasActiveProfile) {
+      return;
+    }
+    try {
+      final reconnect = await backend.connect();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _applySnapshot(reconnect);
+      });
+      if (reconnect.config.connectionState == ConnectionStateValue.connected) {
+        _showMessage(tr('Connection restored after applying changes.'));
+      } else {
+        _showMessage(
+          tr('Reconnection is pending. Complete rule download, then retry.'),
+          isError: true,
+        );
+      }
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      _showMessage(
+        tr('Reconnection failed after applying changes. Tap Connect to retry.'),
+        isError: true,
+      );
     }
   }
 
@@ -2169,10 +2223,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   bool _russiaRulesDataReady(RuntimeSnapshot r) {
+    // If cached files are already present on disk, use them even when
+    // background refresh reports a transient error.
+    if (r.russiaRoutingAssetsUpdatedAt.isNotEmpty) {
+      return true;
+    }
     if (r.routingAssetsStatus == 'error') {
       return false;
     }
-    return r.russiaRoutingAssetsUpdatedAt.isNotEmpty;
+    return false;
   }
 
   Future<bool> _showRussiaRulesFirstDownloadDialog({

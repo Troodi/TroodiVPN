@@ -18,8 +18,79 @@ part 'backend.dart';
 part 'dashboard_screen.dart';
 part 'dashboard_widgets.dart';
 
-void main() {
-  runApp(const TroodiVpnApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  _appendFrontendHeartbeat('main() entered');
+  await _installFrontendCrashLogging();
+  _appendFrontendHeartbeat('crash logging installed');
+  runZonedGuarded(
+    () => runApp(const TroodiVpnApp()),
+    (error, stackTrace) {
+      _appendFrontendCrashLog('ZONE', error, stackTrace);
+    },
+  );
+}
+
+Future<void> _installFrontendCrashLogging() async {
+  FlutterError.onError = (details) {
+    _appendFrontendCrashLog(
+      'FLUTTER',
+      details.exception,
+      details.stack ?? StackTrace.current,
+    );
+    FlutterError.presentError(details);
+  };
+
+  PlatformDispatcher.instance.onError = (error, stackTrace) {
+    _appendFrontendCrashLog('PLATFORM', error, stackTrace);
+    return false;
+  };
+}
+
+void _appendFrontendCrashLog(String source, Object error, StackTrace stackTrace) {
+  final now = DateTime.now().toIso8601String();
+  final payload = StringBuffer()
+    ..writeln('[$now] source=$source')
+    ..writeln('error=$error')
+    ..writeln(stackTrace.toString())
+    ..writeln('---');
+  for (final path in _frontendLogPaths()) {
+    try {
+      final logFile = File(path);
+      logFile.parent.createSync(recursive: true);
+      logFile.writeAsStringSync(
+        payload.toString(),
+        mode: FileMode.append,
+        flush: true,
+      );
+    } catch (_) {
+      // Continue with other paths.
+    }
+  }
+  stderr.writeln(payload.toString());
+}
+
+void _appendFrontendHeartbeat(String message) {
+  final now = DateTime.now().toIso8601String();
+  final payload = '[$now] heartbeat=$message\n';
+  for (final path in _frontendLogPaths()) {
+    try {
+      final logFile = File(path);
+      logFile.parent.createSync(recursive: true);
+      logFile.writeAsStringSync(payload, mode: FileMode.append, flush: true);
+    } catch (_) {
+      // Continue with other paths.
+    }
+  }
+}
+
+List<String> _frontendLogPaths() {
+  final home = Platform.environment['HOME'] ?? '';
+  return <String>[
+    '/tmp/troodi-vpn-frontend-crash.log',
+    if (home.isNotEmpty) '$home/.cache/troodi-vpn/frontend-crash.log',
+    if (home.isNotEmpty) '$home/troodi-vpn-frontend-crash.log',
+  ];
 }
 
 class TroodiVpnApp extends StatelessWidget {

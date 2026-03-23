@@ -38,6 +38,16 @@ const (
 	RulesProfileRussia RulesProfile = "russia"
 )
 
+// Local mixed inbound address used by the desktop client for system proxy and
+// diagnostics. It must be consistent between:
+// - xray config generator (inbound port),
+// - system proxy address,
+// - backend's cleanup/port probing logic.
+const (
+	DefaultMixedInboundPort = 10809
+	DefaultMixedInboundAddr = "127.0.0.1:10809"
+)
+
 type ProfileHealth string
 
 const (

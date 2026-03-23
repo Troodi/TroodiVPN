@@ -2443,6 +2443,7 @@ class _RussiaRulesFirstDownloadDialogState
   DashboardSnapshot? _snap;
   bool _retryBusy = false;
   bool _downloadFailedInSession = false;
+  String? _requestError;
 
   static const _defaultFiles = <String>[
     'geosite.dat',
@@ -2477,6 +2478,7 @@ class _RussiaRulesFirstDownloadDialogState
         }
         setState(() {
           _snap = snap;
+          _requestError = null;
           if (_hasFailure(snap.runtime)) {
             _downloadFailedInSession = true;
           }
@@ -2488,7 +2490,15 @@ class _RussiaRulesFirstDownloadDialogState
             Navigator.of(context).pop(true);
           }
         }
-      } catch (_) {}
+      } catch (error) {
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _downloadFailedInSession = true;
+          _requestError = error.toString();
+        });
+      }
     });
   }
 
@@ -2498,12 +2508,20 @@ class _RussiaRulesFirstDownloadDialogState
       if (mounted) {
         setState(() {
           _snap = snap;
+          _requestError = null;
           if (_hasFailure(snap.runtime)) {
             _downloadFailedInSession = true;
           }
         });
       }
-    } catch (_) {}
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _downloadFailedInSession = true;
+          _requestError = error.toString();
+        });
+      }
+    }
   }
 
   Future<void> _retryDownload() async {
@@ -2514,11 +2532,16 @@ class _RussiaRulesFirstDownloadDialogState
         setState(() {
           _snap = snap;
           _retryBusy = false;
+          _requestError = null;
         });
       }
-    } catch (_) {
+    } catch (error) {
       if (mounted) {
-        setState(() => _retryBusy = false);
+        setState(() {
+          _retryBusy = false;
+          _downloadFailedInSession = true;
+          _requestError = error.toString();
+        });
       }
     }
   }
@@ -2672,6 +2695,17 @@ class _RussiaRulesFirstDownloadDialogState
             const SizedBox(height: 8),
             Text(
               rt.routingAssetsError,
+              style: TextStyle(
+                color: Colors.redAccent.shade100,
+                fontSize: 12,
+              ),
+            ),
+          ],
+          if ((_requestError ?? '').isNotEmpty &&
+              (rt == null || rt.routingAssetsError.isEmpty)) ...[
+            const SizedBox(height: 8),
+            Text(
+              _requestError!,
               style: TextStyle(
                 color: Colors.redAccent.shade100,
                 fontSize: 12,

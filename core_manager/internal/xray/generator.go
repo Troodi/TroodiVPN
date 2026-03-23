@@ -460,7 +460,7 @@ func buildInbounds(cfg config.AppConfig, opts BuildOptions) []map[string]any {
 	inbounds := []map[string]any{
 		{
 			"tag":      "mixed-in",
-			"port":     10808,
+			"port":     config.DefaultMixedInboundPort,
 			"listen":   "127.0.0.1",
 			"protocol": "mixed",
 			"settings": map[string]any{

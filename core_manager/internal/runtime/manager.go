@@ -13,9 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"runtime"
-	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -38,7 +36,7 @@ const (
 	routingAssetsTTL       = 6 * time.Hour
 
 	// Local mixed inbound; must match xray buildInbounds.
-	localMixedInboundAddr = "127.0.0.1:10808"
+	localMixedInboundAddr = config.DefaultMixedInboundAddr
 )
 
 type Status struct {
@@ -150,7 +148,7 @@ func (m *Manager) Start(cfg config.AppConfig) error {
 		return nil
 	}
 
-	if err := m.startLocked(cfg); err != nil {
+	if err := m.startWithRetryLocked(cfg); err != nil {
 		m.lastError = err.Error()
 		return err
 	}
@@ -166,12 +164,49 @@ func (m *Manager) Restart(cfg config.AppConfig) error {
 		m.stopLocked()
 	}
 
-	if err := m.startLocked(cfg); err != nil {
+	if err := m.startWithRetryLocked(cfg); err != nil {
 		m.lastError = err.Error()
 		return err
 	}
 
 	return nil
+}
+
+func (m *Manager) startWithRetryLocked(cfg config.AppConfig) error {
+	const maxAttempts = 3
+	var lastErr error
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		lastErr = m.startLocked(cfg)
+		if lastErr == nil {
+			return nil
+		}
+		if !cfg.TUNEnabled || !isTunBusyStartError(lastErr) || attempt == maxAttempts {
+			return lastErr
+		}
+		m.appendLogLocked(fmt.Sprintf(
+			"[%s] xray start retry %d/%d after busy TUN resource: %v",
+			time.Now().Format(time.RFC3339),
+			attempt,
+			maxAttempts,
+			lastErr,
+		))
+		// Best-effort extra cleanup before retrying startup.
+		_ = platform.CleanupTUN(m.tunState)
+		m.tunState = nil
+		_ = m.cleanupStaleProcessesLocked(m.binaryPath)
+		time.Sleep(420 * time.Millisecond)
+	}
+	return lastErr
+}
+
+func isTunBusyStartError(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "device or resource busy") ||
+		strings.Contains(message, "failed to create server") ||
+		strings.Contains(message, "exit status 23")
 }
 
 func (m *Manager) Stop() error {
@@ -378,11 +413,20 @@ func (m *Manager) stopLocked() error {
 	}
 
 	proc := m.cmd.Process
+	procPID := 0
+	if proc != nil {
+		procPID = proc.Pid
+	}
 	m.appendLogLocked(fmt.Sprintf("[%s] stopping xray", time.Now().Format(time.RFC3339)))
 	err := proc.Kill()
 	if err != nil && !errors.Is(err, os.ErrProcessDone) {
 		m.lastError = err.Error()
 		return err
+	}
+	if procPID > 0 {
+		if !waitForProcessExit(procPID, 1800*time.Millisecond) {
+			m.appendLogLocked(fmt.Sprintf("[%s] process %d did not exit in time; continuing cleanup", time.Now().Format(time.RFC3339), procPID))
+		}
 	}
 	if cleanupErr := m.cleanupStaleProcessesLocked(m.binaryPath); cleanupErr != nil {
 		m.appendLogLocked("stale process cleanup error: " + cleanupErr.Error())
@@ -405,6 +449,41 @@ func (m *Manager) stopLocked() error {
 	m.ready = false
 
 	return nil
+}
+
+func waitForProcessExit(pid int, timeout time.Duration) bool {
+	if pid <= 0 {
+		return true
+	}
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if !processExists(pid) {
+			return true
+		}
+		time.Sleep(40 * time.Millisecond)
+	}
+	return !processExists(pid)
+}
+
+func processExists(pid int) bool {
+	if pid <= 0 {
+		return false
+	}
+	if runtime.GOOS == "windows" {
+		// tasklist exits 0 even when PID not found, so inspect output.
+		cmd := exec.Command("tasklist", "/FI", fmt.Sprintf("PID eq %d", pid))
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			return false
+		}
+		text := strings.ToLower(string(output))
+		return strings.Contains(text, strconv.Itoa(pid)) &&
+			!strings.Contains(text, "no tasks are running")
+	}
+
+	procPath := filepath.Join("/proc", strconv.Itoa(pid))
+	_, err := os.Stat(procPath)
+	return err == nil
 }
 
 func (m *Manager) ensureBinaryLocked() error {
@@ -458,7 +537,7 @@ func downloadFile(url, path string) error {
 }
 
 func downloadFileWithProgress(url, path string, onProgress func(downloaded, total int64)) error {
-	client := &http.Client{Timeout: 2 * time.Minute}
+	client := newDownloadHTTPClient()
 	response, err := client.Get(url)
 	if err != nil {
 		return err
@@ -525,6 +604,77 @@ func downloadFileWithProgress(url, path string, onProgress func(downloaded, tota
 		return err
 	}
 	return nil
+}
+
+func newDownloadHTTPClient() *http.Client {
+	// Russia "warmup" needs network access; on Linux we want to respect
+	// GNOME system proxy (HTTP/SOCKS) because env vars might be unset.
+	transport := &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+	}
+
+	// Try to use GNOME proxy only when env proxies are not set.
+	// (This avoids overriding explicit per-process proxy config.)
+	if os.Getenv("HTTP_PROXY") == "" &&
+		os.Getenv("http_proxy") == "" &&
+		os.Getenv("HTTPS_PROXY") == "" &&
+		os.Getenv("https_proxy") == "" {
+		if settings, err := platform.CaptureSystemProxy(); err == nil && settings != nil {
+			mode := unquoteGSettingsString(settings.ModeRaw)
+			if mode == "manual" {
+				// Prefer HTTP proxy if enabled.
+				if parseGSettingsBool(settings.HTTPEnabledRaw) {
+					if host := unquoteGSettingsString(settings.HTTPHostRaw); host != "" {
+						if port, err := parseGSettingsInt(settings.HTTPPortRaw); err == nil && port > 0 {
+							if proxyURL, err := url.Parse(fmt.Sprintf("http://%s:%d", host, port)); err == nil {
+								transport.Proxy = http.ProxyURL(proxyURL)
+								// Keep default Dialer for the HTTP proxy itself.
+							}
+						}
+					}
+				} else {
+					// Fallback to SOCKS5.
+					if host := unquoteGSettingsString(settings.SocksHostRaw); host != "" {
+						if port, err := parseGSettingsInt(settings.SocksPortRaw); err == nil && port > 0 {
+							dialer, err := proxy.SOCKS5(
+								"tcp",
+								net.JoinHostPort(host, strconv.Itoa(port)),
+								nil,
+								&net.Dialer{Timeout: 30 * time.Second},
+							)
+							if err == nil {
+								transport.Proxy = nil
+								transport.DialContext = func(_ context.Context, network, addr string) (net.Conn, error) {
+									return dialer.Dial(network, addr)
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return &http.Client{
+		Timeout:   75 * time.Second,
+		Transport: transport,
+	}
+}
+
+func unquoteGSettingsString(raw string) string {
+	s := strings.TrimSpace(raw)
+	s = strings.Trim(s, "\"'")
+	return s
+}
+
+func parseGSettingsBool(raw string) bool {
+	s := strings.ToLower(unquoteGSettingsString(raw))
+	return s == "true" || s == "1" || s == "yes" || s == "on"
+}
+
+func parseGSettingsInt(raw string) (int, error) {
+	s := unquoteGSettingsString(raw)
+	return strconv.Atoi(s)
 }
 
 func copyRoutingAssetsToBinaryDir(assetDir, binaryDir string, assets []struct {
@@ -665,6 +815,22 @@ func (m *Manager) appendLogLocked(line string) {
 	if len(m.logs) > maxLogLines {
 		m.logs = append([]string(nil), m.logs[len(m.logs)-maxLogLines:]...)
 	}
+	writeRuntimeDiagnosticLine(line)
+}
+
+func writeRuntimeDiagnosticLine(line string) {
+	logDir := filepath.Join(os.TempDir(), "troodi-vpn")
+	if err := os.MkdirAll(logDir, 0o755); err != nil {
+		return
+	}
+	logPath := filepath.Join(logDir, "core-manager-runtime.log")
+	message := fmt.Sprintf("%s %s\n", time.Now().Format(time.RFC3339Nano), line)
+	file, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return
+	}
+	defer file.Close()
+	_, _ = file.WriteString(message)
 }
 
 func activeProfile(cfg config.AppConfig) config.ServerProfile {
@@ -720,6 +886,13 @@ func (m *Manager) cleanupStaleProcessesLocked(binaryPath string) error {
 		currentPID = m.cmd.Process.Pid
 	}
 
+	m.appendLogLocked(fmt.Sprintf(
+		"[%s] cleanupStaleProcesses: currentPID=%d binaryPath=%q",
+		time.Now().Format(time.RFC3339Nano),
+		currentPID,
+		binaryPath,
+	))
+
 	if runtime.GOOS == "windows" {
 		pids, err := findBinaryProcessIDs(binaryPath)
 		if err != nil {
@@ -742,62 +915,17 @@ func (m *Manager) cleanupStaleProcessesLocked(binaryPath string) error {
 		return nil
 	}
 
-	pids := map[int]struct{}{}
-	if byPort, err := findListeningProcessIDs(10808); err == nil {
-		for _, pid := range byPort {
-			for _, relatedPID := range collectRelatedUnixProcessIDs(pid, currentPID) {
-				pids[relatedPID] = struct{}{}
-			}
-		}
-	}
-	if byBinary, err := findUnixBinaryProcessIDs(binaryPath); err == nil {
-		for _, pid := range byBinary {
-			pids[pid] = struct{}{}
-		}
-	}
-
-	for pid := range pids {
-		if pid == 0 || pid == currentPID {
-			continue
-		}
-		if err := terminateUnixProcess(pid); err != nil {
-			return err
-		}
-		m.appendLogLocked(fmt.Sprintf("[%s] cleaned stale xray process (pid %d)", time.Now().Format(time.RFC3339), pid))
-	}
+	// Safety-first on Linux/macOS: do not scan and kill "stale" processes
+	// globally. Such scanning can match external VPN apps (v2rayN/sing-box) or
+	// unrelated binaries with similar command lines. We only manage the process
+	// started by this manager (m.cmd) via stopLocked()/waitForExit.
+	m.appendLogLocked(fmt.Sprintf(
+		"[%s] cleanupStaleProcesses: skipped external PID cleanup on %s",
+		time.Now().Format(time.RFC3339Nano),
+		runtime.GOOS,
+	))
 
 	return nil
-}
-
-func collectRelatedUnixProcessIDs(pid int, currentPID int) []int {
-	if pid <= 0 || pid == currentPID {
-		return nil
-	}
-
-	collected := []int{pid}
-	parentPID, err := processParentPID(pid)
-	if err != nil {
-		return collected
-	}
-
-	for parentPID > 1 && parentPID != currentPID {
-		cmdline, err := processCommandLine(parentPID)
-		if err != nil {
-			break
-		}
-		lower := strings.ToLower(cmdline)
-		if strings.Contains(lower, "v2rayn") || strings.Contains(lower, "sing-box") {
-			collected = append(collected, parentPID)
-		}
-		nextParent, err := processParentPID(parentPID)
-		if err != nil || nextParent == parentPID {
-			break
-		}
-		parentPID = nextParent
-	}
-
-	slices.Reverse(collected)
-	return collected
 }
 
 func findBinaryProcessIDs(binaryPath string) ([]int, error) {
@@ -831,136 +959,6 @@ func findBinaryProcessIDs(binaryPath string) ([]int, error) {
 	return pids, nil
 }
 
-func findListeningProcessIDs(port int) ([]int, error) {
-	cmd := exec.Command("ss", "-lptn", fmt.Sprintf("sport = :%d", port))
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return nil, err
-	}
-
-	matches := regexp.MustCompile(`pid=(\d+)`).FindAllStringSubmatch(string(output), -1)
-	pids := make([]int, 0, len(matches))
-	seen := map[int]struct{}{}
-	for _, match := range matches {
-		pid, err := strconv.Atoi(match[1])
-		if err != nil {
-			continue
-		}
-		if _, exists := seen[pid]; exists {
-			continue
-		}
-		seen[pid] = struct{}{}
-		pids = append(pids, pid)
-	}
-
-	return pids, nil
-}
-
-func findUnixBinaryProcessIDs(binaryPath string) ([]int, error) {
-	cmd := exec.Command("pgrep", "-f", binaryPath)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
-			return nil, nil
-		}
-		return nil, err
-	}
-
-	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
-	pids := make([]int, 0, len(lines))
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		pid, err := strconv.Atoi(line)
-		if err != nil {
-			continue
-		}
-		pids = append(pids, pid)
-	}
-	return pids, nil
-}
-
-func processParentPID(pid int) (int, error) {
-	cmd := exec.Command("ps", "-o", "ppid=", "-p", strconv.Itoa(pid))
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return 0, err
-	}
-	value := strings.TrimSpace(string(output))
-	if value == "" {
-		return 0, nil
-	}
-	return strconv.Atoi(value)
-}
-
-func processCommandLine(pid int) (string, error) {
-	cmd := exec.Command("ps", "-o", "args=", "-p", strconv.Itoa(pid))
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(string(output)), nil
-}
-
-func terminateUnixProcess(pid int) error {
-	if pid <= 0 {
-		return nil
-	}
-
-	kill := func(signal string, elevated bool) ([]byte, error) {
-		args := []string{"-" + signal, strconv.Itoa(pid)}
-		if elevated {
-			cmd, err := platform.CommandAsRoot("kill", args...)
-			if err != nil {
-				return nil, err
-			}
-			return cmd.CombinedOutput()
-		}
-		return exec.Command("kill", args...).CombinedOutput()
-	}
-
-	if _, err := kill("TERM", false); err == nil {
-		if waitForPortRelease(10808, pid, 800*time.Millisecond) {
-			return nil
-		}
-	}
-	if _, err := kill("TERM", true); err == nil {
-		if waitForPortRelease(10808, pid, 1200*time.Millisecond) {
-			return nil
-		}
-	}
-	if output, err := kill("KILL", true); err != nil {
-		return fmt.Errorf("failed to cleanup stale xray process %d: %w (%s)", pid, err, strings.TrimSpace(string(output)))
-	}
-	if !waitForPortRelease(10808, pid, 1200*time.Millisecond) {
-		return fmt.Errorf("stale xray process %d did not release port 10808", pid)
-	}
-	return nil
-}
-
-func waitForPortRelease(port int, pid int, timeout time.Duration) bool {
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		pids, err := findListeningProcessIDs(port)
-		if err == nil {
-			stillListening := false
-			for _, current := range pids {
-				if current == pid {
-					stillListening = true
-					break
-				}
-			}
-			if !stillListening {
-				return true
-			}
-		}
-		time.Sleep(120 * time.Millisecond)
-	}
-	return false
-}
-
 func (m *Manager) applySystemProxyLocked(cfg config.AppConfig) error {
 	if cfg.TUNEnabled || !cfg.SystemProxyEnabled {
 		if m.proxyState != nil {
@@ -973,7 +971,7 @@ func (m *Manager) applySystemProxyLocked(cfg config.AppConfig) error {
 	}
 
 	if m.proxyState == nil {
-		previous, err := platform.ApplySystemProxy("127.0.0.1:10808")
+		previous, err := platform.ApplySystemProxy(localMixedInboundAddr)
 		if err != nil {
 			return err
 		}

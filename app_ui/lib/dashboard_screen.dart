@@ -566,12 +566,59 @@ class _DashboardScreenState extends State<DashboardScreen>
     }
   }
 
+  Future<void> _showNoProfileAlert() async {
+    final goToProfiles = await showDialog<bool>(
+      context: context,
+      builder: (context) => _DialogShell(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              tr('No profile configured'),
+              style: TextStyle(
+                color: AppPalette.homeText.withValues(alpha: 0.96),
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              tr('Import or create a VPN profile to connect.'),
+              style: TextStyle(
+                color: AppPalette.homeTextMuted.withValues(alpha: 0.84),
+                height: 1.45,
+              ),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                _DialogSecondaryButton(
+                  label: tr('Cancel'),
+                  onPressed: () => Navigator.of(context).pop(false),
+                ),
+                const SizedBox(width: 10),
+                _DialogPrimaryButton(
+                  label: tr('Add profile'),
+                  onPressed: () => Navigator.of(context).pop(true),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+    if (goToProfiles == true && mounted) {
+      setState(() {
+        selectedPage = AppPage.profiles;
+      });
+    }
+  }
+
   Future<void> _toggleConnection() async {
     if (connection == ConnectionStateValue.disconnected && !hasActiveProfile) {
-      _showMessage(
-        tr('Select or create a profile first.'),
-        isError: true,
-      );
+      await _showNoProfileAlert();
       return;
     }
 
@@ -874,9 +921,18 @@ class _DashboardScreenState extends State<DashboardScreen>
     proxyDomains = List<String>.from(config.proxyDomains);
     directDomains = List<String>.from(config.directDomains);
     blockedDomains = List<String>.from(config.blockedDomains);
-    disabledVpnRules.removeWhere((item) => !proxyDomains.contains(item));
-    disabledDirectRules.removeWhere((item) => !directDomains.contains(item));
-    disabledBlockedRules.removeWhere((item) => !blockedDomains.contains(item));
+    disabledVpnRules
+      ..clear()
+      ..addAll(config.disabledProxyDomains
+          .where((item) => proxyDomains.contains(item)));
+    disabledDirectRules
+      ..clear()
+      ..addAll(config.disabledDirectDomains
+          .where((item) => directDomains.contains(item)));
+    disabledBlockedRules
+      ..clear()
+      ..addAll(config.disabledBlockedDomains
+          .where((item) => blockedDomains.contains(item)));
     profiles = List<ServerProfile>.from(config.profiles);
     activeProfileId = config.activeProfileId;
     runtimeStatus = snapshot.runtime;
@@ -900,6 +956,9 @@ class _DashboardScreenState extends State<DashboardScreen>
       proxyDomains: List<String>.from(proxyDomains),
       directDomains: List<String>.from(directDomains),
       blockedDomains: List<String>.from(blockedDomains),
+      disabledProxyDomains: disabledVpnRules.toList(),
+      disabledDirectDomains: disabledDirectRules.toList(),
+      disabledBlockedDomains: disabledBlockedRules.toList(),
       profiles: List<ServerProfile>.from(profiles),
     );
   }
@@ -1001,6 +1060,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                       },
                       tunnelMode: tunnelMode,
                       onTunnelModeChanged: _switchTunnelMode,
+                      onNoProfiles: _showNoProfileAlert,
                     ),
                     if (!canConnect) ...[
                       const SizedBox(height: 16),
@@ -1011,6 +1071,12 @@ class _DashboardScreenState extends State<DashboardScreen>
                           'Open Profiles, import or create a profile, then select it on this screen.',
                         ),
                         icon: Icons.info_outline_rounded,
+                        actionLabel: tr('Add'),
+                        onAction: () {
+                          setState(() {
+                            selectedPage = AppPage.profiles;
+                          });
+                        },
                       ),
                     ],
                   ],
@@ -1300,6 +1366,13 @@ class _DashboardScreenState extends State<DashboardScreen>
       return;
     }
 
+    for (final other in RuleBucket.values) {
+      if (other == bucket) continue;
+      if (_rulesForBucketValues(other).contains(normalized)) {
+        _disabledRulesForBucket(other).add(normalized);
+      }
+    }
+
     await _replaceRulesForBucket(bucket, [normalized, ...current]);
     controller.clear();
     _setInputError(bucket, null);
@@ -1356,15 +1429,23 @@ class _DashboardScreenState extends State<DashboardScreen>
     _showMessage(tr('Rule updated.'));
   }
 
-  void _setRuleEnabled(RuleBucket bucket, String value, bool enabled) {
+  Future<void> _setRuleEnabled(
+      RuleBucket bucket, String value, bool enabled) async {
     final disabled = _disabledRulesForBucket(bucket);
     setState(() {
       if (enabled) {
         disabled.remove(value);
+        for (final other in RuleBucket.values) {
+          if (other == bucket) continue;
+          if (_rulesForBucketValues(other).contains(value)) {
+            _disabledRulesForBucket(other).add(value);
+          }
+        }
       } else {
         disabled.add(value);
       }
     });
+    await _saveConfig(_currentConfig(), preserveConnection: true);
   }
 
   Future<void> _pasteRulesToBucket(RuleBucket bucket) async {
@@ -2293,6 +2374,9 @@ class _DashboardScreenState extends State<DashboardScreen>
         proxyDomains: const [],
         directDomains: const [],
         blockedDomains: const [],
+        disabledProxyDomains: const [],
+        disabledDirectDomains: const [],
+        disabledBlockedDomains: const [],
       ),
     );
   }

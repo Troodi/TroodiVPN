@@ -88,6 +88,9 @@ class AppConfigState {
     required this.proxyDomains,
     required this.directDomains,
     required this.blockedDomains,
+    required this.disabledProxyDomains,
+    required this.disabledDirectDomains,
+    required this.disabledBlockedDomains,
     required this.profiles,
   });
 
@@ -102,6 +105,9 @@ class AppConfigState {
   final List<String> proxyDomains;
   final List<String> directDomains;
   final List<String> blockedDomains;
+  final List<String> disabledProxyDomains;
+  final List<String> disabledDirectDomains;
+  final List<String> disabledBlockedDomains;
   final List<ServerProfile> profiles;
 
   factory AppConfigState.fromJson(Map<String, dynamic> json) {
@@ -123,6 +129,9 @@ class AppConfigState {
       proxyDomains: _stringList(json['proxyDomains']),
       directDomains: _stringList(json['directDomains']),
       blockedDomains: _stringList(json['blockedDomains']),
+      disabledProxyDomains: _stringList(json['disabledProxyDomains']),
+      disabledDirectDomains: _stringList(json['disabledDirectDomains']),
+      disabledBlockedDomains: _stringList(json['disabledBlockedDomains']),
       profiles: (json['profiles'] as List<dynamic>? ?? [])
           .map((item) => _serverProfileFromJson(item as Map<String, dynamic>))
           .toList(),
@@ -141,6 +150,9 @@ class AppConfigState {
     List<String>? proxyDomains,
     List<String>? directDomains,
     List<String>? blockedDomains,
+    List<String>? disabledProxyDomains,
+    List<String>? disabledDirectDomains,
+    List<String>? disabledBlockedDomains,
     List<ServerProfile>? profiles,
   }) {
     return AppConfigState(
@@ -155,6 +167,11 @@ class AppConfigState {
       proxyDomains: proxyDomains ?? this.proxyDomains,
       directDomains: directDomains ?? this.directDomains,
       blockedDomains: blockedDomains ?? this.blockedDomains,
+      disabledProxyDomains: disabledProxyDomains ?? this.disabledProxyDomains,
+      disabledDirectDomains:
+          disabledDirectDomains ?? this.disabledDirectDomains,
+      disabledBlockedDomains:
+          disabledBlockedDomains ?? this.disabledBlockedDomains,
       profiles: profiles ?? this.profiles,
     );
   }
@@ -172,6 +189,9 @@ class AppConfigState {
       'proxyDomains': proxyDomains,
       'directDomains': directDomains,
       'blockedDomains': blockedDomains,
+      'disabledProxyDomains': disabledProxyDomains,
+      'disabledDirectDomains': disabledDirectDomains,
+      'disabledBlockedDomains': disabledBlockedDomains,
       'profiles': profiles.map(_serverProfileToJson).toList(),
     };
   }

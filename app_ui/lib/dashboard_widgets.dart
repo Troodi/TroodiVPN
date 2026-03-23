@@ -1042,6 +1042,7 @@ class _ProfileRowCard extends StatelessWidget {
           }
 
           final actions = Wrap(
+            alignment: WrapAlignment.end,
             spacing: 10,
             runSpacing: 10,
             children: [
@@ -1068,9 +1069,12 @@ class _ProfileRowCard extends StatelessWidget {
 
           if (compact) {
             return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                infoBlock(),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: infoBlock(),
+                ),
                 const SizedBox(height: 14),
                 actions,
               ],
@@ -1081,7 +1085,7 @@ class _ProfileRowCard extends StatelessWidget {
             children: [
               Expanded(child: infoBlock()),
               const SizedBox(width: 16),
-              Flexible(child: actions),
+              actions,
             ],
           );
         },
@@ -1617,6 +1621,7 @@ class _MainConnectionCard extends StatelessWidget {
     required this.onProfileChanged,
     required this.tunnelMode,
     required this.onTunnelModeChanged,
+    this.onNoProfiles,
   });
 
   final String profileName;
@@ -1630,6 +1635,7 @@ class _MainConnectionCard extends StatelessWidget {
   final ValueChanged<String?> onProfileChanged;
   final TunnelMode tunnelMode;
   final ValueChanged<TunnelMode> onTunnelModeChanged;
+  final VoidCallback? onNoProfiles;
 
   @override
   Widget build(BuildContext context) {
@@ -1711,6 +1717,7 @@ class _MainConnectionCard extends StatelessWidget {
                 selectedProfileId: selectedProfileId,
                 profileItems: profileItems,
                 onProfileChanged: onProfileChanged,
+                onNoProfiles: onNoProfiles,
               ),
             ),
           )
@@ -1780,15 +1787,18 @@ class _ServerSelectCard extends StatelessWidget {
     required this.selectedProfileId,
     required this.profileItems,
     required this.onProfileChanged,
+    this.onNoProfiles,
   });
 
   final String selectedName;
   final String? selectedProfileId;
   final List<ServerProfile> profileItems;
   final ValueChanged<String?> onProfileChanged;
+  final VoidCallback? onNoProfiles;
 
   Future<void> _openServerPicker(BuildContext context) async {
     if (profileItems.isEmpty) {
+      onNoProfiles?.call();
       return;
     }
 
@@ -4155,7 +4165,7 @@ class _RulesColumnCard extends StatelessWidget {
   final VoidCallback onChanged;
   final Future<void> Function() onAdd;
   final Future<void> Function() onPaste;
-  final void Function(String value, bool enabled) onToggleRule;
+  final Future<void> Function(String value, bool enabled) onToggleRule;
   final Future<void> Function(String value) onDeleteRule;
   final Future<void> Function(RoutingRule rule) onEditRule;
 
@@ -5435,11 +5445,15 @@ class _HintCard extends StatelessWidget {
     required this.title,
     required this.description,
     required this.icon,
+    this.actionLabel,
+    this.onAction,
   });
 
   final String title;
   final String description;
   final IconData icon;
+  final String? actionLabel;
+  final VoidCallback? onAction;
 
   @override
   Widget build(BuildContext context) {
@@ -5476,6 +5490,30 @@ class _HintCard extends StatelessWidget {
               ],
             ),
           ),
+          if (actionLabel != null && onAction != null) ...[
+            const SizedBox(width: 12),
+            TextButton(
+              onPressed: onAction,
+              style: TextButton.styleFrom(
+                foregroundColor: AppPalette.homeAccent,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(
+                    color: AppPalette.homeAccent.withValues(alpha: 0.4),
+                  ),
+                ),
+              ),
+              child: Text(
+                actionLabel!,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -7087,10 +7125,10 @@ class _LanguageFlagIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 20,
-      height: 14,
+      width: 24,
+      height: 16,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(3),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.14),
@@ -7100,26 +7138,105 @@ class _LanguageFlagIcon extends StatelessWidget {
         ],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(4),
-        child: ColoredBox(
-          color: Colors.white.withValues(alpha: 0.04),
-          child: Center(
-            child: Text(
-              switch (language) {
-                AppLanguage.en => '🇺🇸',
-                AppLanguage.ru => '🇷🇺',
-                AppLanguage.zh => '🇨🇳',
-              },
-              style: const TextStyle(
-                fontSize: 12,
-                height: 1,
-              ),
-            ),
-          ),
+        borderRadius: BorderRadius.circular(3),
+        child: CustomPaint(
+          painter: _FlagPainter(language),
+          size: const Size(24, 16),
         ),
       ),
     );
   }
+}
+
+class _FlagPainter extends CustomPainter {
+  const _FlagPainter(this.language);
+  final AppLanguage language;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    switch (language) {
+      case AppLanguage.ru:
+        _paintRussia(canvas, size);
+      case AppLanguage.en:
+        _paintUSA(canvas, size);
+      case AppLanguage.zh:
+        _paintChina(canvas, size);
+    }
+  }
+
+  void _paintRussia(Canvas canvas, Size size) {
+    final h = size.height / 3;
+    canvas.drawRect(
+        Rect.fromLTWH(0, 0, size.width, h), Paint()..color = Colors.white);
+    canvas.drawRect(Rect.fromLTWH(0, h, size.width, h),
+        Paint()..color = const Color(0xFF0039A6));
+    canvas.drawRect(Rect.fromLTWH(0, h * 2, size.width, h),
+        Paint()..color = const Color(0xFFD52B1E));
+  }
+
+  void _paintUSA(Canvas canvas, Size size) {
+    final stripeH = size.height / 13;
+    for (var i = 0; i < 13; i++) {
+      canvas.drawRect(
+        Rect.fromLTWH(0, stripeH * i, size.width, stripeH),
+        Paint()
+          ..color = i.isEven ? const Color(0xFFB22234) : Colors.white,
+      );
+    }
+    final cantonW = size.width * 0.4;
+    final cantonH = stripeH * 7;
+    canvas.drawRect(
+      Rect.fromLTWH(0, 0, cantonW, cantonH),
+      Paint()..color = const Color(0xFF3C3B6E),
+    );
+    final starPaint = Paint()..color = Colors.white;
+    final starR = stripeH * 0.38;
+    for (var row = 0; row < 4; row++) {
+      for (var col = 0; col < 3; col++) {
+        final cx = cantonW * (col + 0.5) / 3;
+        final cy = cantonH * (row + 0.5) / 4;
+        _drawStar(canvas, Offset(cx, cy), starR, starPaint);
+      }
+    }
+  }
+
+  void _paintChina(Canvas canvas, Size size) {
+    canvas.drawRect(
+      Rect.fromLTWH(0, 0, size.width, size.height),
+      Paint()..color = const Color(0xFFDE2910),
+    );
+    final starPaint = Paint()..color = const Color(0xFFFFDE00);
+    _drawStar(canvas, Offset(size.width * 0.2, size.height * 0.3),
+        size.height * 0.22, starPaint);
+    final small = size.height * 0.08;
+    _drawStar(
+        canvas, Offset(size.width * 0.38, size.height * 0.14), small, starPaint);
+    _drawStar(
+        canvas, Offset(size.width * 0.46, size.height * 0.28), small, starPaint);
+    _drawStar(
+        canvas, Offset(size.width * 0.42, size.height * 0.46), small, starPaint);
+    _drawStar(
+        canvas, Offset(size.width * 0.34, size.height * 0.56), small, starPaint);
+  }
+
+  void _drawStar(Canvas canvas, Offset center, double r, Paint paint) {
+    final path = Path();
+    for (var i = 0; i < 5; i++) {
+      final angle = -pi / 2 + i * 4 * pi / 5;
+      final point = Offset(center.dx + r * cos(angle), center.dy + r * sin(angle));
+      if (i == 0) {
+        path.moveTo(point.dx, point.dy);
+      } else {
+        path.lineTo(point.dx, point.dy);
+      }
+    }
+    path.close();
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(_FlagPainter oldDelegate) =>
+      language != oldDelegate.language;
 }
 
 String _profileId(String seed) {

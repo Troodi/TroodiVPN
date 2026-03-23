@@ -32,6 +32,10 @@ func Build(cfg config.AppConfig) Config {
 }
 
 func BuildWithOptions(cfg config.AppConfig, opts BuildOptions) Config {
+	cfg.ProxyDomains = filterDisabled(cfg.ProxyDomains, cfg.DisabledProxyDomains)
+	cfg.DirectDomains = filterDisabled(cfg.DirectDomains, cfg.DisabledDirectDomains)
+	cfg.BlockedDomains = filterDisabled(cfg.BlockedDomains, cfg.DisabledBlockedDomains)
+
 	rules := make([]map[string]any, 0, len(cfg.ProxyDomains)+len(cfg.DirectDomains)+len(cfg.BlockedDomains)+8)
 	activeProfile := findActiveProfile(cfg)
 
@@ -444,6 +448,23 @@ func buildStreamSettings(profile config.ServerProfile, bindInterface string) map
 	}
 
 	return streamSettings
+}
+
+func filterDisabled(all []string, disabled []string) []string {
+	if len(disabled) == 0 {
+		return all
+	}
+	set := make(map[string]bool, len(disabled))
+	for _, d := range disabled {
+		set[d] = true
+	}
+	result := make([]string, 0, len(all))
+	for _, item := range all {
+		if !set[item] {
+			result = append(result, item)
+		}
+	}
+	return result
 }
 
 func splitAndTrim(value string) []string {

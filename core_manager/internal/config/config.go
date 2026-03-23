@@ -81,34 +81,40 @@ type ServerProfile struct {
 }
 
 type AppConfig struct {
-	ActiveProfileID    string          `json:"activeProfileId"`
-	ConnectionState    ConnectionState `json:"connectionState"`
-	RoutingMode        RoutingMode     `json:"routingMode"`
-	RulesProfile       RulesProfile    `json:"rulesProfile"`
-	DNSMode            DNSMode         `json:"dnsMode"`
-	SystemProxyEnabled bool            `json:"systemProxyEnabled"`
-	TUNEnabled         bool            `json:"tunEnabled"`
-	LaunchAtStartup    bool            `json:"launchAtStartup"`
-	ProxyDomains       []string        `json:"proxyDomains"`
-	DirectDomains      []string        `json:"directDomains"`
-	BlockedDomains     []string        `json:"blockedDomains"`
-	Profiles           []ServerProfile `json:"profiles"`
+	ActiveProfileID        string          `json:"activeProfileId"`
+	ConnectionState        ConnectionState `json:"connectionState"`
+	RoutingMode            RoutingMode     `json:"routingMode"`
+	RulesProfile           RulesProfile    `json:"rulesProfile"`
+	DNSMode                DNSMode         `json:"dnsMode"`
+	SystemProxyEnabled     bool            `json:"systemProxyEnabled"`
+	TUNEnabled             bool            `json:"tunEnabled"`
+	LaunchAtStartup        bool            `json:"launchAtStartup"`
+	ProxyDomains           []string        `json:"proxyDomains"`
+	DirectDomains          []string        `json:"directDomains"`
+	BlockedDomains         []string        `json:"blockedDomains"`
+	DisabledProxyDomains   []string        `json:"disabledProxyDomains"`
+	DisabledDirectDomains  []string        `json:"disabledDirectDomains"`
+	DisabledBlockedDomains []string        `json:"disabledBlockedDomains"`
+	Profiles               []ServerProfile `json:"profiles"`
 }
 
 func DefaultAppConfig() AppConfig {
 	return AppConfig{
-		ActiveProfileID:    "",
-		ConnectionState:    ConnectionDisconnected,
-		RoutingMode:        RoutingGlobal,
-		RulesProfile:       RulesProfileGlobal,
-		DNSMode:            DNSAuto,
-		SystemProxyEnabled: false,
-		TUNEnabled:         true,
-		LaunchAtStartup:    false,
-		ProxyDomains:       []string{},
-		DirectDomains:      []string{},
-		BlockedDomains:     []string{},
-		Profiles:           []ServerProfile{},
+		ActiveProfileID:        "",
+		ConnectionState:        ConnectionDisconnected,
+		RoutingMode:            RoutingGlobal,
+		RulesProfile:           RulesProfileGlobal,
+		DNSMode:                DNSAuto,
+		SystemProxyEnabled:     false,
+		TUNEnabled:             true,
+		LaunchAtStartup:        false,
+		ProxyDomains:           []string{},
+		DirectDomains:          []string{},
+		BlockedDomains:         []string{},
+		DisabledProxyDomains:   []string{},
+		DisabledDirectDomains:  []string{},
+		DisabledBlockedDomains: []string{},
+		Profiles:               []ServerProfile{},
 	}
 }
 
@@ -207,6 +213,9 @@ func cloneConfig(cfg AppConfig) AppConfig {
 	cloned.ProxyDomains = append([]string(nil), cfg.ProxyDomains...)
 	cloned.DirectDomains = append([]string(nil), cfg.DirectDomains...)
 	cloned.BlockedDomains = append([]string(nil), cfg.BlockedDomains...)
+	cloned.DisabledProxyDomains = append([]string(nil), cfg.DisabledProxyDomains...)
+	cloned.DisabledDirectDomains = append([]string(nil), cfg.DisabledDirectDomains...)
+	cloned.DisabledBlockedDomains = append([]string(nil), cfg.DisabledBlockedDomains...)
 	cloned.Profiles = append([]ServerProfile(nil), cfg.Profiles...)
 	return cloned
 }
@@ -215,6 +224,9 @@ func normalizeConfig(cfg AppConfig) AppConfig {
 	cfg.ProxyDomains = append([]string(nil), cfg.ProxyDomains...)
 	cfg.DirectDomains = append([]string(nil), cfg.DirectDomains...)
 	cfg.BlockedDomains = append([]string(nil), cfg.BlockedDomains...)
+	cfg.DisabledProxyDomains = append([]string(nil), cfg.DisabledProxyDomains...)
+	cfg.DisabledDirectDomains = append([]string(nil), cfg.DisabledDirectDomains...)
+	cfg.DisabledBlockedDomains = append([]string(nil), cfg.DisabledBlockedDomains...)
 	cfg.Profiles = append([]ServerProfile(nil), cfg.Profiles...)
 	if cfg.ProxyDomains == nil {
 		cfg.ProxyDomains = []string{}
@@ -224,6 +236,15 @@ func normalizeConfig(cfg AppConfig) AppConfig {
 	}
 	if cfg.BlockedDomains == nil {
 		cfg.BlockedDomains = []string{}
+	}
+	if cfg.DisabledProxyDomains == nil {
+		cfg.DisabledProxyDomains = []string{}
+	}
+	if cfg.DisabledDirectDomains == nil {
+		cfg.DisabledDirectDomains = []string{}
+	}
+	if cfg.DisabledBlockedDomains == nil {
+		cfg.DisabledBlockedDomains = []string{}
 	}
 	if cfg.Profiles == nil {
 		cfg.Profiles = []ServerProfile{}

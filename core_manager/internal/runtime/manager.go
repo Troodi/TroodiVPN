@@ -270,11 +270,14 @@ func (m *Manager) startLocked(cfg config.AppConfig) error {
 		tunOptions.DNSServers = []string{tunOptions.IPAddress}
 
 		m.appendLogLocked(fmt.Sprintf("[%s] TUN: validating wintun.dll", time.Now().Format(time.RFC3339)))
+		wintunAt := time.Now()
 		if err := platform.EnsureWintunDLL(m.binaryPath); err != nil {
 			return err
 		}
+		m.appendLogLocked(fmt.Sprintf("[%s] [TUN timing] wintun.dll check %d ms", time.Now().Format(time.RFC3339), time.Since(wintunAt).Milliseconds()))
 
 		m.appendLogLocked(fmt.Sprintf("[%s] TUN: default route + upstream DNS resolve (parallel)", time.Now().Format(time.RFC3339)))
+		parallelAt := time.Now()
 		activeProfile := activeProfile(cfg)
 		var defaultRoute *platform.DefaultRoute
 		var bypassCIDRs []string
@@ -296,7 +299,7 @@ func (m *Manager) startLocked(cfg config.AppConfig) error {
 		if bypassErr != nil {
 			return bypassErr
 		}
-		m.appendLogLocked(fmt.Sprintf("[%s] TUN: route/DNS stage done in %d ms", time.Now().Format(time.RFC3339), time.Since(startedAt).Milliseconds()))
+		m.appendLogLocked(fmt.Sprintf("[%s] [TUN timing] default route + DNS resolve %d ms", time.Now().Format(time.RFC3339), time.Since(parallelAt).Milliseconds()))
 		buildOptions.BindInterface = defaultRoute.InterfaceAlias
 		buildOptions.BindAddress = defaultRoute.IPAddress
 		tunOptions.ManageRoutes = true
@@ -307,9 +310,16 @@ func (m *Manager) startLocked(cfg config.AppConfig) error {
 		buildOptions.TUNMTU = tunOptions.MTU
 	}
 
+	var writeCfgAt time.Time
+	if cfg.TUNEnabled {
+		writeCfgAt = time.Now()
+	}
 	configPath, err := m.writeConfigLocked(cfg, buildOptions)
 	if err != nil {
 		return err
+	}
+	if cfg.TUNEnabled {
+		m.appendLogLocked(fmt.Sprintf("[%s] [TUN timing] writeConfig %d ms", time.Now().Format(time.RFC3339), time.Since(writeCfgAt).Milliseconds()))
 	}
 
 	var cmd *exec.Cmd
@@ -335,8 +345,15 @@ func (m *Manager) startLocked(cfg config.AppConfig) error {
 		return err
 	}
 
+	var cmdStartAt time.Time
+	if cfg.TUNEnabled {
+		cmdStartAt = time.Now()
+	}
 	if err := cmd.Start(); err != nil {
 		return err
+	}
+	if cfg.TUNEnabled {
+		m.appendLogLocked(fmt.Sprintf("[%s] [TUN timing] xray cmd.Start %d ms", time.Now().Format(time.RFC3339), time.Since(cmdStartAt).Milliseconds()))
 	}
 
 	go m.captureLogs(stdout)
@@ -366,11 +383,14 @@ func (m *Manager) startLocked(cfg config.AppConfig) error {
 	if cfg.TUNEnabled {
 		m.appendLogLocked(fmt.Sprintf("[%s] TUN: preparing adapter and routes", time.Now().Format(time.RFC3339)))
 		prepareStartedAt := time.Now()
-		tunState, err := platform.PrepareTUN(tunOptions)
+		var tunDiag platform.TUNPrepareDiagnostics
+		tunState, err := platform.PrepareTUN(tunOptions, &tunDiag)
 		if err != nil {
 			_ = m.stopLocked()
 			return err
 		}
+		m.appendLogLocked(fmt.Sprintf("[%s] [TUN timing] PrepareTUN: mode=%s total=%d ms wait_adapter=%d configure=%d single_script=%d (set TROODI_TUN_TIMING=1 to split wait vs configure)",
+			time.Now().Format(time.RFC3339), tunDiag.Mode, tunDiag.TotalMs, tunDiag.WaitForAdapterMs, tunDiag.ConfigureMs, tunDiag.SingleScriptMs))
 		m.tunState = tunState
 		if tunOptions.ManageRoutes {
 			if len(tunState.BypassCIDRs) > 0 {

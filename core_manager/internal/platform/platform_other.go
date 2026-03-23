@@ -331,7 +331,15 @@ func DefaultTUNOptions() TUNOptions {
 	}
 }
 
-func PrepareTUN(opts TUNOptions) (*TUNState, error) {
+func PrepareTUN(opts TUNOptions, diag *TUNPrepareDiagnostics) (*TUNState, error) {
+	tAll := time.Now()
+	defer func() {
+		if diag != nil {
+			diag.TotalMs = time.Since(tAll).Milliseconds()
+			diag.Mode = "other"
+		}
+	}()
+
 	state := &TUNState{
 		InterfaceAlias: opts.InterfaceAlias,
 		InterfaceIndex: 1,

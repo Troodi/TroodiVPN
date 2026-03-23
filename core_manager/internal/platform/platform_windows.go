@@ -6,12 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
@@ -249,15 +251,56 @@ $route | ConvertTo-Json -Compress
 	return &route, nil
 }
 
-// buildPrepareTUNScript waits for the wintun adapter (Get-NetAdapter — same view as New-NetRoute)
-// and applies IP/DNS/metric/routes in one PowerShell process so we pay powershell.exe startup once.
-func buildPrepareTUNScript(opts TUNOptions) string {
-	alias := escapeSingleQuotes(opts.InterfaceAlias)
-	var b strings.Builder
+func prefixToMask(prefix int) string {
+	if prefix <= 0 || prefix > 32 {
+		return "255.255.255.0"
+	}
+	mask := uint32(^uint32(0) << (32 - prefix))
+	return fmt.Sprintf("%d.%d.%d.%d", (mask>>24)&0xff, (mask>>16)&0xff, (mask>>8)&0xff, mask&0xff)
+}
 
+// waitForTUNInterfaceIndex polls the OS until the TUN adapter appears. This avoids a long-running
+// PowerShell loop (Get-NetAdapter each iteration is very slow on some systems).
+func waitForTUNInterfaceIndex(alias string, deadline time.Duration) (int, error) {
+	alias = strings.TrimSpace(alias)
+	if alias == "" {
+		return 0, errors.New("empty interface alias")
+	}
+	deadlineAt := time.Now().Add(deadline)
+	for time.Now().Before(deadlineAt) {
+		if ifi, err := net.InterfaceByName(alias); err == nil && ifi.Index > 0 {
+			return ifi.Index, nil
+		}
+		if ifaces, err := net.Interfaces(); err == nil {
+			for _, ifi := range ifaces {
+				if strings.EqualFold(strings.TrimSpace(ifi.Name), alias) && ifi.Index > 0 {
+					return ifi.Index, nil
+				}
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	return 0, fmt.Errorf("timeout waiting for network interface %q", alias)
+}
+
+func waitForTUNAdapterPowerShell(alias string, diag *TUNPrepareDiagnostics) (int, error) {
+	tw := time.Now()
+	out, err := runPowerShellOutput(buildWaitForTUNAdapterScript(alias, 12, true))
+	if diag != nil {
+		diag.WaitForAdapterMs = time.Since(tw).Milliseconds()
+	}
+	if err != nil {
+		return 0, fmt.Errorf("prepare TUN (wait for adapter): %w", err)
+	}
+	return parseTUNIfIndexOutput(out)
+}
+
+func buildWaitForTUNAdapterScript(alias string, deadlineSec int, emitOutput bool) string {
+	esc := escapeSingleQuotes(alias)
+	var b strings.Builder
 	fmt.Fprintf(&b, `
 $AdapterName = '%s'
-$deadline = (Get-Date).AddSeconds(12)
+$deadline = (Get-Date).AddSeconds(%d)
 $adapter = $null
 while ((Get-Date) -lt $deadline) {
   $adapter = Get-NetAdapter -IncludeHidden -Name $AdapterName -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -265,7 +308,96 @@ while ((Get-Date) -lt $deadline) {
   Start-Sleep -Milliseconds 20
 }
 if ($null -eq $adapter -or $adapter.ifIndex -le 0) { exit 2 }
-`, alias)
+`, esc, deadlineSec)
+	if emitOutput {
+		b.WriteString("Write-Output $adapter.ifIndex\n")
+	}
+	return b.String()
+}
+
+// configureTUNNative uses netsh and route.exe instead of PowerShell for much faster setup.
+func configureTUNNative(opts TUNOptions, ifIndex int) error {
+	alias := opts.InterfaceAlias
+	ip := opts.IPAddress
+	mask := prefixToMask(opts.PrefixLength)
+
+	// IP address: netsh interface ip set address "name" static ip mask [gateway]
+	if out, err := runCmdHidden("netsh", "interface", "ip", "set", "address",
+		"name="+alias, "static", ip, mask, "0.0.0.0"); err != nil {
+		return fmt.Errorf("netsh set address: %w: %s", err, strings.TrimSpace(string(out)))
+	}
+
+	// DNS - first server
+	if len(opts.DNSServers) > 0 {
+		if out, err := runCmdHidden("netsh", "interface", "ip", "set", "dns",
+			"name="+alias, "static", opts.DNSServers[0]); err != nil {
+			return fmt.Errorf("netsh set dns: %w: %s", err, strings.TrimSpace(string(out)))
+		}
+		for i := 1; i < len(opts.DNSServers); i++ {
+			if out, err := runCmdHidden("netsh", "interface", "ip", "add", "dns",
+				"name="+alias, opts.DNSServers[i], "index="+strconv.Itoa(i+1)); err != nil {
+				return fmt.Errorf("netsh add dns: %w: %s", err, strings.TrimSpace(string(out)))
+			}
+		}
+	}
+
+	// Interface metric
+	if out, err := runCmdHidden("netsh", "interface", "ip", "set", "interface",
+		"name="+alias, "metric=1"); err != nil {
+		return fmt.Errorf("netsh set interface metric: %w: %s", err, strings.TrimSpace(string(out)))
+	}
+
+	if opts.ManageRoutes {
+		// Bypass routes on default interface
+		if opts.DefaultRoute != nil && opts.DefaultRoute.InterfaceIndex != 0 && opts.DefaultRoute.NextHop != "" {
+			for _, cidrStr := range opts.BypassCIDRs {
+				_, ipnet, err := net.ParseCIDR(cidrStr)
+				if err != nil {
+					continue
+				}
+				dest := ipnet.IP.String()
+				mask := prefixToMask(cidrPrefix(ipnet))
+				if out, err := runCmdHidden("route", "add", dest, "mask", mask, opts.DefaultRoute.NextHop,
+					"if", strconv.Itoa(opts.DefaultRoute.InterfaceIndex), "metric", "1"); err != nil {
+					if !strings.Contains(string(out), "already exists") {
+						return fmt.Errorf("route add bypass %s: %w: %s", cidrStr, err, strings.TrimSpace(string(out)))
+					}
+				}
+			}
+		}
+
+		// Split routes on TUN interface (0.0.0.0/1 and 128.0.0.0/1)
+		for _, r := range []struct{ dest, mask string }{
+			{"0.0.0.0", "128.0.0.0"},
+			{"128.0.0.0", "128.0.0.0"},
+		} {
+			if out, err := runCmdHidden("route", "add", r.dest, "mask", r.mask, "0.0.0.0",
+				"if", strconv.Itoa(ifIndex), "metric", "1"); err != nil {
+				if !strings.Contains(string(out), "already exists") {
+					return fmt.Errorf("route add split %s/%s: %w: %s", r.dest, r.mask, err, strings.TrimSpace(string(out)))
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+func cidrPrefix(cidr *net.IPNet) int {
+	ones, _ := cidr.Mask.Size()
+	return ones
+}
+
+func runCmdHidden(name string, args ...string) ([]byte, error) {
+	cmd := exec.Command(name, args...)
+	cmd.SysProcAttr = hiddenPowerShellAttributes()
+	return cmd.CombinedOutput()
+}
+
+func buildConfigureTUNScript(opts TUNOptions) string {
+	alias := escapeSingleQuotes(opts.InterfaceAlias)
+	var b strings.Builder
+	fmt.Fprintf(&b, "$AdapterName = '%s'\n", alias)
 
 	fmt.Fprintf(&b, `
 $existing = Get-NetIPAddress -InterfaceAlias $AdapterName -AddressFamily IPv4 -ErrorAction SilentlyContinue |
@@ -324,28 +456,21 @@ foreach ($prefix in $splitPrefixes) {
 `)
 	}
 
-	b.WriteString("Write-Output $adapter.ifIndex\n")
 	return b.String()
 }
 
-func runPowerShellOutput(script string) ([]byte, error) {
-	command := exec.Command("powershell", "-NoProfile", "-Command", script)
-	command.SysProcAttr = hiddenPowerShellAttributes()
-	return command.Output()
+// buildPrepareTUNScript waits for the wintun adapter (Get-NetAdapter) and applies IP/DNS/metric/routes
+// in one PowerShell process so we pay powershell.exe startup once.
+func buildPrepareTUNScript(opts TUNOptions) string {
+	return buildWaitForTUNAdapterScript(opts.InterfaceAlias, 12, false) +
+		buildConfigureTUNScript(opts) +
+		"\nWrite-Output $adapter.ifIndex\n"
 }
 
-func PrepareTUN(opts TUNOptions) (*TUNState, error) {
-	if opts.InterfaceAlias == "" {
-		return nil, errors.New("tun interface alias is required")
-	}
-
-	out, err := runPowerShellOutput(buildPrepareTUNScript(opts))
-	if err != nil {
-		return nil, fmt.Errorf("prepare TUN (wait + configure): %w", err)
-	}
+func parseTUNIfIndexOutput(out []byte) (int, error) {
 	rawOut := strings.TrimSpace(strings.ReplaceAll(string(out), "\r\n", "\n"))
 	if rawOut == "" {
-		return nil, errors.New("prepare TUN: empty output")
+		return 0, errors.New("prepare TUN: empty output")
 	}
 	var idx int
 	lines := strings.Split(rawOut, "\n")
@@ -360,16 +485,18 @@ func PrepareTUN(opts TUNOptions) (*TUNState, error) {
 		}
 	}
 	if idx <= 0 {
-		return nil, fmt.Errorf("prepare TUN: invalid ifIndex in output %q", rawOut)
+		return 0, fmt.Errorf("prepare TUN: invalid ifIndex in output %q", rawOut)
 	}
+	return idx, nil
+}
 
+func tunStateFromOpts(opts TUNOptions, idx int) *TUNState {
 	routePrefixes := []string{}
 	bypassCIDRs := []string{}
 	if opts.ManageRoutes {
 		bypassCIDRs = append(bypassCIDRs, opts.BypassCIDRs...)
 		routePrefixes = []string{"0.0.0.0/1", "128.0.0.0/1"}
 	}
-
 	return &TUNState{
 		InterfaceAlias: opts.InterfaceAlias,
 		InterfaceIndex: idx,
@@ -378,7 +505,111 @@ func PrepareTUN(opts TUNOptions) (*TUNState, error) {
 		DNSServers:     append([]string(nil), opts.DNSServers...),
 		RoutePrefixes:  routePrefixes,
 		BypassCIDRs:    bypassCIDRs,
-	}, nil
+	}
+}
+
+func runPowerShellOutput(script string) ([]byte, error) {
+	command := exec.Command("powershell", "-NoProfile", "-Command", script)
+	command.SysProcAttr = hiddenPowerShellAttributes()
+	return command.Output()
+}
+
+func PrepareTUN(opts TUNOptions, diag *TUNPrepareDiagnostics) (*TUNState, error) {
+	if opts.InterfaceAlias == "" {
+		return nil, errors.New("tun interface alias is required")
+	}
+
+	tAll := time.Now()
+	defer func() {
+		if diag != nil {
+			diag.TotalMs = time.Since(tAll).Milliseconds()
+		}
+	}()
+
+	usePS := os.Getenv("TROODI_TUN_USE_PS") == "1"
+	timingSplit := os.Getenv("TROODI_TUN_TIMING") == "1"
+
+	if usePS {
+		// Legacy PowerShell path (slower, use for debugging or if native fails)
+		if timingSplit {
+			if diag != nil {
+				diag.Mode = "split_ps"
+			}
+			tw := time.Now()
+			out, err := runPowerShellOutput(buildWaitForTUNAdapterScript(opts.InterfaceAlias, 12, true))
+			if diag != nil {
+				diag.WaitForAdapterMs = time.Since(tw).Milliseconds()
+			}
+			if err != nil {
+				return nil, fmt.Errorf("prepare TUN (wait for adapter): %w", err)
+			}
+			idx, err := parseTUNIfIndexOutput(out)
+			if err != nil {
+				return nil, err
+			}
+			tc := time.Now()
+			err = runPowerShell(buildConfigureTUNScript(opts))
+			if diag != nil {
+				diag.ConfigureMs = time.Since(tc).Milliseconds()
+			}
+			if err != nil {
+				return nil, fmt.Errorf("prepare TUN (configure): %w", err)
+			}
+			return tunStateFromOpts(opts, idx), nil
+		}
+		if diag != nil {
+			diag.Mode = "single_ps"
+		}
+		tps := time.Now()
+		out, err := runPowerShellOutput(buildPrepareTUNScript(opts))
+		if diag != nil {
+			diag.SingleScriptMs = time.Since(tps).Milliseconds()
+		}
+		if err != nil {
+			return nil, fmt.Errorf("prepare TUN (wait + configure): %w", err)
+		}
+		idx, err := parseTUNIfIndexOutput(out)
+		if err != nil {
+			return nil, err
+		}
+		return tunStateFromOpts(opts, idx), nil
+	}
+
+	// Fast path: wait for adapter in-process (no PowerShell loop) + configure via netsh/route
+	tw := time.Now()
+	var idx int
+	var err error
+	if os.Getenv("TROODI_TUN_WAIT_PS") == "1" {
+		if diag != nil {
+			diag.Mode = "native_wait_ps"
+		}
+		idx, err = waitForTUNAdapterPowerShell(opts.InterfaceAlias, diag)
+	} else {
+		if diag != nil {
+			diag.Mode = "native"
+		}
+		idx, err = waitForTUNInterfaceIndex(opts.InterfaceAlias, 12*time.Second)
+		if diag != nil {
+			diag.WaitForAdapterMs = time.Since(tw).Milliseconds()
+		}
+		if err != nil {
+			idx, err = waitForTUNAdapterPowerShell(opts.InterfaceAlias, diag)
+			if diag != nil && err == nil {
+				diag.Mode = "native_ps_fallback"
+			}
+		}
+	}
+	if err != nil {
+		return nil, err
+	}
+	tc := time.Now()
+	if err := configureTUNNative(opts, idx); err != nil {
+		return nil, fmt.Errorf("prepare TUN (configure): %w", err)
+	}
+	if diag != nil {
+		diag.ConfigureMs = time.Since(tc).Milliseconds()
+	}
+	return tunStateFromOpts(opts, idx), nil
 }
 
 func CleanupTUN(state *TUNState) error {

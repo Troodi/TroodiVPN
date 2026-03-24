@@ -19,3 +19,4 @@ core_manager/dist/
 Thumbs.db
 desktop.ini
 tmp/
+/dist/linux-release/

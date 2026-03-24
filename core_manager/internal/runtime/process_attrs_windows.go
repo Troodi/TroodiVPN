@@ -4,6 +4,7 @@ package runtime
 
 import (
 	"errors"
+	"os"
 	"syscall"
 	"time"
 	"unsafe"
@@ -35,6 +36,10 @@ func hiddenProcessAttributes() *syscall.SysProcAttr {
 		HideWindow:    true,
 		CreationFlags: windows.CREATE_NO_WINDOW,
 	}
+}
+
+func gracefulStop(proc *os.Process) error {
+	return proc.Kill()
 }
 
 func (m *Manager) measureProcessIO() (uint64, uint64) {

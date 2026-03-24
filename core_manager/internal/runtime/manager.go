@@ -446,14 +446,21 @@ func (m *Manager) stopLocked() error {
 		procPID = proc.Pid
 	}
 	m.appendLogLocked(fmt.Sprintf("[%s] stopping xray", time.Now().Format(time.RFC3339)))
-	err := proc.Kill()
+	err := gracefulStop(proc)
 	if err != nil && !errors.Is(err, os.ErrProcessDone) {
-		m.lastError = err.Error()
-		return err
+		err = proc.Kill()
+		if err != nil && !errors.Is(err, os.ErrProcessDone) {
+			m.lastError = err.Error()
+			return err
+		}
 	}
 	if procPID > 0 {
-		if !waitForProcessExit(procPID, 1800*time.Millisecond) {
-			m.appendLogLocked(fmt.Sprintf("[%s] process %d did not exit in time; continuing cleanup", time.Now().Format(time.RFC3339), procPID))
+		if !waitForProcessExit(procPID, 1500*time.Millisecond) {
+			m.appendLogLocked(fmt.Sprintf("[%s] process %d did not exit after SIGTERM; sending SIGKILL", time.Now().Format(time.RFC3339), procPID))
+			_ = proc.Kill()
+			if !waitForProcessExit(procPID, 500*time.Millisecond) {
+				m.appendLogLocked(fmt.Sprintf("[%s] process %d did not exit in time; continuing cleanup", time.Now().Format(time.RFC3339), procPID))
+			}
 		}
 	}
 	if cleanupErr := m.cleanupStaleProcessesLocked(m.binaryPath); cleanupErr != nil {

@@ -161,14 +161,14 @@ class _Sidebar extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _SidebarTrafficRow(
-                  label: loc(language, 'Traffic sent'),
+                  label: 'OUT',
                   icon: Icons.arrow_upward_rounded,
                   iconColor: const Color(0xFF6CEB86),
                   value: _formatRate(uploadBps),
                 ),
                 const SizedBox(height: 8),
                 _SidebarTrafficRow(
-                  label: loc(language, 'Traffic received'),
+                  label: 'IN',
                   icon: Icons.arrow_downward_rounded,
                   iconColor: const Color(0xFFFF9E8B),
                   value: _formatRate(downloadBps),

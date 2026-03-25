@@ -1,0 +1,47 @@
+{
+  "activeProfileId": "main-reality",
+  "connectionState": "connected",
+  "routingMode": "blacklist",
+  "rulesProfile": "global",
+  "dnsMode": "auto",
+  "systemProxyEnabled": true,
+  "tunEnabled": false,
+  "launchAtStartup": true,
+  "proxyDomains": [
+    "openai.com",
+    "chatgpt.com",
+    "github.com"
+  ],
+  "directDomains": [
+    "bank.ru",
+    "gosuslugi.ru",
+    "youtube.com"
+  ],
+  "blockedDomains": [
+    "doubleclick.net",
+    "ads.example.com"
+  ],
+  "profiles": [
+    {
+      "id": "main-reality",
+      "name": "Main Reality",
+      "latencyMs": 48,
+      "health": "healthy",
+      "protocol": "vless-reality"
+    },
+    {
+      "id": "backup-nl",
+      "name": "Backup Netherlands",
+      "latencyMs": 63,
+      "health": "healthy",
+      "protocol": "trojan"
+    },
+    {
+      "id": "usa-streaming",
+      "name": "USA Streaming",
+      "latencyMs": 124,
+      "health": "testing",
+      "protocol": "vmess"
+    }
+  ]
+}

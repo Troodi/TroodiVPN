@@ -120,7 +120,7 @@ Troodi VPN hides complexity while keeping full control available.
 
 ## ⭐ Keywords
 
-vpn, xray, v2ray, reality, vless, proxy, tun, routing, firewall, privacy, censorship bypass, desktop vpn, flutter vpn
+vpn, xray, v2ray, reality, vless, proxy, tun, routing, firewall, privacy, desktop vpn, flutter vpn
 
 ---
 
